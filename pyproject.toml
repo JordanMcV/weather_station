@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "weatherhat"
+name = "weather-station"
 version = "0.1.0"
 description = ""
 authors = ["Jordan McVeigh <jordan.mcveigh@gmail.com>"]
