@@ -8,6 +8,7 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.12"
 influxdb-client = "^1.45.0"
+weatherhat = "^1.0.0"
 
 
 [build-system]
