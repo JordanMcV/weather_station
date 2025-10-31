@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "weather-server"
+version = "0.1.0"
+description = "Weather Station Server - Data ingestion API and analytics for Pi 5"
+authors = ["Jordan McVeigh <jordan.mcveigh@gmail.com>"]
+readme = "README.md"
+packages = [{include = "weather_server", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+influxdb-client = "^1.45.0"
+fastapi = "^0.104.0"
+uvicorn = "^0.24.0"
+
+[tool.poetry.scripts]
+weather-server = "weather_server.main:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "weather-client"
+version = "0.1.0"
+description = "Weather Station Client - Lightweight data collector for Pi Zero"
+authors = ["Jordan McVeigh <jordan.mcveigh@gmail.com>"]
+readme = "README.md"
+packages = [{include = "weather_client", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+weatherhat = "^1.0.0"
+httpx = "^0.25.0"
+psutil = "^5.9.0"
+
+[tool.poetry.scripts]
+weather-client = "weather_client.main:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
