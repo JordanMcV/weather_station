@@ -21,11 +21,14 @@ This is a **monorepo** with two fully independent packages:
 ### Client (Pi Zero)
 ```bash
 cd client/
-poetry install
-poetry run weather-client
+# Install with uv (blazing fast!)
+uv venv && source .venv/bin/activate
+uv pip install -e .
+uv run weather-client
 ```
 
 **Dependencies:** weatherhat, httpx, psutil
+**Package Manager:** [uv](https://github.com/astral-sh/uv) (extremely fast, perfect for Pi Zero)
 **Size:** Minimal - optimized for Pi Zero
 **Purpose:** Collect sensor data, buffer locally, upload to server
 
@@ -38,6 +41,7 @@ docker-compose up -d
 ```
 
 **Dependencies:** fastapi, uvicorn, influxdb-client
+**Package Manager:** Poetry
 **Size:** Full-featured
 **Purpose:** Ingest data via REST API, store in InfluxDB, visualize with Grafana
 
@@ -105,8 +109,9 @@ weather_station/
 ### Client Development
 ```bash
 cd client
-poetry install
-poetry run weather-client --status
+uv venv && source .venv/bin/activate
+uv pip install -e .
+uv run weather-client --status
 ```
 
 ### Server Development

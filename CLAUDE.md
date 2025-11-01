@@ -112,16 +112,19 @@ Pi W (Collector)                    Pi 5 (Server)
 
 ## Deployment Configuration
 
-### Pi W (Collector)
-- **Run Mode**: `collector`
+### Pi W (Collector) - Bare Metal
+- **Deployment**: Direct on bare metal (no Docker - saves resources!)
+- **Package Manager**: uv (ultra-fast Python package installer)
+- **Service Management**: systemd for auto-start on boot
 - **Upload Interval**: 5 minutes
 - **Buffer Size**: 1000 readings max
 - **Retry Attempts**: 5 with exponential backoff
 - **Local Storage**: SQLite in `/data/weather.db`
+- **Resource Optimization**: Minimal dependencies, no containerization overhead
 
-### Pi 5 (Server)
-- **Run Mode**: `server`
-- **Docker Compose**: InfluxDB + Grafana + API server
+### Pi 5 (Server) - Docker Compose
+- **Deployment**: Docker Compose stack
+- **Components**: InfluxDB + Grafana + FastAPI server
 - **Data Retention**: 1 year raw data, 5 years aggregated
 - **Monitoring**: Prometheus + Alertmanager (optional)
 
@@ -149,26 +152,24 @@ Pi W (Collector)                    Pi 5 (Server)
 
 ```
 weather_station/
-├── client/                    # Pi Zero collector package
+├── client/                    # Pi Zero collector package (BARE METAL)
 │   ├── src/weather_client/
 │   │   ├── collector/        # Sensor reading & buffering
 │   │   ├── config.py         # Client-only configuration
 │   │   ├── models.py         # Data models (duplicated)
 │   │   └── main.py           # Entry point
 │   ├── pyproject.toml        # Minimal dependencies (weatherhat, httpx, psutil)
-│   ├── Dockerfile            # Optimized for Pi Zero
-│   ├── docker-compose.yaml
-│   ├── .env.example
-│   └── README.md
+│   ├── .env.example          # Environment configuration
+│   └── README.md             # Bare metal installation guide
 │
-├── server/                    # Pi 5 server package
+├── server/                    # Pi 5 server package (DOCKER)
 │   ├── src/weather_server/
 │   │   ├── api/              # FastAPI routes & InfluxDB client
 │   │   ├── config.py         # Server-only configuration
 │   │   ├── models.py         # Data models (duplicated)
 │   │   └── main.py           # Entry point
 │   ├── pyproject.toml        # Server dependencies (fastapi, uvicorn, influxdb-client)
-│   ├── Dockerfile
+│   ├── Dockerfile            # Uses Poetry
 │   ├── docker-compose.yaml   # Includes InfluxDB + Grafana
 │   ├── .env.example
 │   └── README.md
@@ -180,21 +181,30 @@ weather_station/
 
 ## Development Commands
 
-### Client (Pi W) Setup
+### Client (Pi W) Setup - Bare Metal with uv
 ```bash
 cd client
 
-# Install dependencies
-poetry install
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.cargo/bin:$PATH"
 
-# Run collector
-poetry run weather-client --server-url http://pi5:8080 --api-key your-key
+# Create venv and install dependencies (blazing fast!)
+uv venv
+source .venv/bin/activate
+uv pip install -e .
 
-# Or use docker
-docker-compose up -d
+# Run collector (development)
+uv run weather-client --server-url http://pi5:8080 --api-key your-key
 
 # Check buffer status
-poetry run weather-client --status
+uv run weather-client --status
+
+# Setup as systemd service (production)
+sudo nano /etc/systemd/system/weather-client.service
+# (See client/README.md for systemd configuration)
+sudo systemctl enable weather-client
+sudo systemctl start weather-client
 ```
 
 ### Server (Pi 5) Setup
