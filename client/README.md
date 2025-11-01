@@ -9,7 +9,6 @@ Lightweight weather data collector for Raspberry Pi Zero with WeatherHAT sensor.
 - 📤 Batch HTTP uploads with retry logic
 - 🔄 Exponential backoff for failed uploads
 - 📊 System health monitoring
-- ⚡ Optimized for low-power Pi Zero
 
 ## Installation
 
@@ -85,32 +84,14 @@ uv run python -m weather_client
 
 ## Running as a System Service (systemd)
 
-For automatic startup on boot, create a systemd service:
+For automatic startup on boot, install the provided systemd service:
 
 ```bash
-# Create service file
+# Copy the service file to systemd
+sudo cp weather-client.service /etc/systemd/system/
+
+# If needed, edit paths in the service file to match your setup
 sudo nano /etc/systemd/system/weather-client.service
-```
-
-Add the following content:
-
-```ini
-[Unit]
-Description=Weather Station Client
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=/home/pi/weather_station/client
-Environment="PATH=/home/pi/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
-ExecStart=/home/pi/.cargo/bin/uv run weather-client
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
 ```
 
 Enable and start the service:

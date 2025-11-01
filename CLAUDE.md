@@ -159,6 +159,7 @@ weather_station/
 │   │   ├── models.py         # Data models (duplicated)
 │   │   └── main.py           # Entry point
 │   ├── pyproject.toml        # Minimal dependencies (weatherhat, httpx, psutil)
+│   ├── weather-client.service # systemd service file for auto-start
 │   ├── .env.example          # Environment configuration
 │   └── README.md             # Bare metal installation guide
 │
@@ -201,10 +202,11 @@ uv run weather-client --server-url http://pi5:8080 --api-key your-key
 uv run weather-client --status
 
 # Setup as systemd service (production)
-sudo nano /etc/systemd/system/weather-client.service
-# (See client/README.md for systemd configuration)
+sudo cp weather-client.service /etc/systemd/system/
+sudo systemctl daemon-reload
 sudo systemctl enable weather-client
 sudo systemctl start weather-client
+sudo systemctl status weather-client
 ```
 
 ### Server (Pi 5) Setup

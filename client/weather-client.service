@@ -1,0 +1,16 @@
+[Unit]
+Description=Weather Station Client
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/weather_station/client
+Environment="PATH=/home/pi/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/home/pi/.cargo/bin/uv run weather-client
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
