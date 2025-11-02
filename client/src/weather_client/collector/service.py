@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class WeatherCollector:
     def __init__(self, config: Config):
         self.config = config
-        self.sensor = weatherhat.WeatherHat()
+        self.sensor = weatherhat.WeatherHAT()
         self.sensor.temperature_offset = config.temperature_offset
 
         # Only initialize buffer and uploader if not in dry-run mode
