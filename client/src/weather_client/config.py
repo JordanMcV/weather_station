@@ -30,6 +30,9 @@ class Config:
     # Logging
     log_level: str = "INFO"
 
+    # Dry run mode (no database, no uploads - just logging)
+    dry_run: bool = False
+
     @classmethod
     def from_env(cls) -> "Config":
         """Load configuration from environment variables."""

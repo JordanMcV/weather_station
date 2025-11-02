@@ -20,8 +20,15 @@ class WeatherCollector:
         self.config = config
         self.sensor = weatherhat.WeatherHat()
         self.sensor.temperature_offset = config.temperature_offset
-        self.buffer = SQLiteBuffer(config.database_path, config.buffer_max_size)
-        self.uploader = WeatherUploader(config)
+
+        # Only initialize buffer and uploader if not in dry-run mode
+        if not config.dry_run:
+            self.buffer = SQLiteBuffer(config.database_path, config.buffer_max_size)
+            self.uploader = WeatherUploader(config)
+        else:
+            self.buffer = None
+            self.uploader = None
+
         self.running = False
         self.last_upload = None
 
@@ -31,10 +38,17 @@ class WeatherCollector:
         self.running = True
 
         # Start background tasks
-        tasks = [
-            asyncio.create_task(self._collect_readings()),
-            asyncio.create_task(self._upload_readings()),
-        ]
+        if self.config.dry_run:
+            # In dry-run mode, only collect readings (no upload task)
+            tasks = [
+                asyncio.create_task(self._collect_readings()),
+            ]
+        else:
+            # Normal mode: collect and upload
+            tasks = [
+                asyncio.create_task(self._collect_readings()),
+                asyncio.create_task(self._upload_readings()),
+            ]
 
         try:
             await asyncio.gather(*tasks)
@@ -68,12 +82,24 @@ class WeatherCollector:
                     rain_total=self.sensor.rain_total if self.sensor.updated_wind_rain else None,
                 )
 
-                # Validate and store reading
+                # Validate reading
                 if reading.validate():
-                    if self.buffer.add_reading(reading):
-                        logger.debug(f"Added reading: T={reading.temperature:.1f}°C, H={reading.humidity:.1f}%, P={reading.pressure:.1f}hPa")
+                    if self.config.dry_run:
+                        # Dry-run mode: just log the reading
+                        logger.info(
+                            f"📊 READING: "
+                            f"T={reading.temperature:.1f}°C, "
+                            f"H={reading.humidity:.1f}%, "
+                            f"P={reading.pressure:.1f}hPa"
+                            + (f", Wind={reading.wind_speed:.1f}m/s@{reading.wind_direction}°" if reading.wind_speed else "")
+                            + (f", Rain={reading.rain_total:.1f}mm" if reading.rain_total else "")
+                        )
                     else:
-                        logger.error("Failed to add reading to buffer")
+                        # Normal mode: store in buffer
+                        if self.buffer.add_reading(reading):
+                            logger.debug(f"Added reading: T={reading.temperature:.1f}°C, H={reading.humidity:.1f}%, P={reading.pressure:.1f}hPa")
+                        else:
+                            logger.error("Failed to add reading to buffer")
                 else:
                     logger.warning(f"Invalid reading discarded: {reading}")
 
@@ -119,7 +145,10 @@ class WeatherCollector:
             # Get system metrics
             cpu_percent = psutil.cpu_percent(interval=1)
             memory = psutil.virtual_memory()
-            disk = psutil.disk_usage(self.config.database_path)
+
+            # In dry-run mode, use a default path for disk check
+            disk_path = self.config.database_path if not self.config.dry_run else "/"
+            disk = psutil.disk_usage(disk_path)
 
             # Try to get CPU temperature (Raspberry Pi specific)
             cpu_temp = None
@@ -129,8 +158,11 @@ class WeatherCollector:
             except (FileNotFoundError, ValueError):
                 pass
 
-            # Test network connectivity
-            network_connected = self._test_network_connectivity()
+            # Test network connectivity (skip in dry-run mode)
+            network_connected = False if self.config.dry_run else self._test_network_connectivity()
+
+            # Get buffer size (0 in dry-run mode)
+            buffer_size = 0 if self.config.dry_run else self.buffer.get_buffer_size()
 
             return SystemHealth(
                 timestamp=datetime.utcnow(),
@@ -141,10 +173,11 @@ class WeatherCollector:
                 temperature=cpu_temp,
                 network_connected=network_connected,
                 last_upload=self.last_upload,
-                buffer_size=self.buffer.get_buffer_size(),
+                buffer_size=buffer_size,
             )
         except Exception as e:
             logger.error(f"Error getting system status: {e}")
+            buffer_size = 0 if self.config.dry_run else (self.buffer.get_buffer_size() if self.buffer else 0)
             return SystemHealth(
                 timestamp=datetime.utcnow(),
                 station_id=self.config.station_id,
@@ -152,7 +185,7 @@ class WeatherCollector:
                 memory_percent=0.0,
                 disk_percent=0.0,
                 network_connected=False,
-                buffer_size=self.buffer.get_buffer_size(),
+                buffer_size=buffer_size,
             )
 
     def _test_network_connectivity(self) -> bool:

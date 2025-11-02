@@ -57,6 +57,11 @@ def create_parser() -> ArgumentParser:
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Logging level"
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Run in dry-run mode (no database, no uploads - just log readings)"
+    )
 
     return parser
 
@@ -120,12 +125,18 @@ def main():
         config.station_id = args.station_id
     if args.log_level:
         config.log_level = args.log_level
+    if args.dry_run:
+        config.dry_run = True
 
     # Setup logging
     setup_logging(config.log_level)
     logger = logging.getLogger(__name__)
 
-    logger.info(f"Starting Weather Client (Station: {config.station_id})")
+    if config.dry_run:
+        logger.info(f"Starting Weather Client in DRY-RUN mode (Station: {config.station_id})")
+        logger.info("⚠️  DRY-RUN: No database buffering or HTTP uploads will occur")
+    else:
+        logger.info(f"Starting Weather Client (Station: {config.station_id})")
 
     try:
         asyncio.run(run_collector(config, args.status))

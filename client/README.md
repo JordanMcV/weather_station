@@ -52,12 +52,7 @@ LOG_LEVEL=INFO
 ### Run the collector
 
 ```bash
-# With uv (no venv activation needed)
 uv run weather-client
-
-# Or after activating venv
-source .venv/bin/activate
-weather-client
 ```
 
 ### Run with custom settings
@@ -76,11 +71,19 @@ uv run weather-client \
 uv run weather-client --status
 ```
 
-### Run as module
+### Test sensor readings (dry-run mode)
+
+Test the sensor and see readings without saving to database or uploading to server:
 
 ```bash
-uv run python -m weather_client
+uv run weather-client --dry-run
 ```
+
+This is useful for:
+- Testing sensor hardware connectivity
+- Verifying sensor calibration
+- Debugging without affecting production data
+- Quick sensor checks without server access
 
 ## Running as a System Service (systemd)
 
@@ -113,10 +116,6 @@ sudo journalctl -u weather-client -f
 - **weatherhat**: WeatherHAT sensor library
 - **httpx**: Async HTTP client for data uploads
 - **psutil**: System health monitoring
-
-No FastAPI, no InfluxDB - minimal and efficient!
-
-Installed with [uv](https://github.com/astral-sh/uv) for blazing fast installs on Pi Zero.
 
 ## Architecture
 
