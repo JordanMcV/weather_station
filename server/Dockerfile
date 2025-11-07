@@ -1,4 +1,4 @@
-# Dockerfile for Weather Server (Pi 5)
+# Dockerfile for Weather Server (Pi 4)
 
 FROM python:3.12-slim
 
@@ -18,7 +18,7 @@ COPY pyproject.toml ./
 COPY src/ ./src/
 
 # Install dependencies using uv (no virtual environment in container)
-RUN uv pip install --system -e .
+RUN uv sync
 
 # Create non-root user
 RUN useradd --create-home --shell /bin/bash weather && \
