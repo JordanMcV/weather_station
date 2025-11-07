@@ -19,9 +19,9 @@ Dual Raspberry Pi weather station system with weatherhat sensor hardware, Influx
 │              Pi W (piw)             │
 ├─────────────────────────────────────┤
 │ • WeatherHat sensor reading         │
-│ • Local SQLite buffering           │
+│ • Local SQLite buffering            │
 │ • Batch HTTP uploads                │
-│ • Retry logic + error handling     │
+│ • Retry logic + error handling      │
 │ • Health monitoring                 │
 └─────────────────────────────────────┘
 ```
@@ -33,16 +33,16 @@ Dual Raspberry Pi weather station system with weatherhat sensor hardware, Influx
 - **Retry Logic**: Exponential backoff for failed uploads
 - **Health Monitor**: System status, disk space, network connectivity
 
-### Pi 5 (Server Mode) - Analytics & Storage
+### Pi 4 (Server Mode) - Analytics & Storage
 ```
 ┌─────────────────────────────────────┐
-│              Pi 5                   │
+│              Pi 4                   │
 ├─────────────────────────────────────┤
 │ • HTTP API server                   │
 │ • Data validation & processing      │
 │ • InfluxDB time series storage      │
-│ • Grafana visualization            │
-│ • Monitoring & alerting            │
+│ • Grafana visualization             │
+│ • Monitoring & alerting             │
 └─────────────────────────────────────┘
 ```
 
