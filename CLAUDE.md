@@ -170,7 +170,7 @@ weather_station/
 │   │   ├── models.py         # Data models (duplicated)
 │   │   └── main.py           # Entry point
 │   ├── pyproject.toml        # Server dependencies (fastapi, uvicorn, influxdb-client)
-│   ├── Dockerfile            # Uses Poetry
+│   ├── Dockerfile            # Uses uv
 │   ├── docker-compose.yaml   # Includes InfluxDB + Grafana
 │   ├── .env.example
 │   └── README.md
@@ -213,14 +213,20 @@ sudo systemctl status weather-client
 ```bash
 cd server
 
-# Install dependencies
-poetry install
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.cargo/bin:$PATH"
+
+# Install dependencies (for local development)
+uv venv
+source .venv/bin/activate
+uv pip install -e .
 
 # Start full stack (InfluxDB + Grafana + API)
 docker-compose up -d
 
-# Or run API server directly
-poetry run weather-server --port 8080
+# Or run API server directly (local development)
+uv run weather-server --port 8080
 
 # Check data ingestion
 curl http://localhost:8080/api/v1/health

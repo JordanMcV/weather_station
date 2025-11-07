@@ -10,6 +10,13 @@ WorkingDirectory=/home/pi/weather_station/client
 Environment="PATH=/home/pi/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
 ExecStart=/home/pi/.cargo/bin/uv run weather-client
 Restart=always
+Environment="SERVER_URL=http://pi4:8080"
+Environment="API_KEY=your-api-key-here"
+Environment="STATION_ID=piw"
+Environment="UPLOAD_INTERVAL=300"
+Environment="DATABASE_PATH=/data/weather.db"
+Environment="TEMPERATURE_OFFSET=-6.0"
+Environment="LOG_LEVEL=INFO"
 RestartSec=10
 
 [Install]

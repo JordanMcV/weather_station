@@ -7,19 +7,18 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 # Set working directory
 WORKDIR /app
 
-# Copy poetry files
-COPY pyproject.toml poetry.lock* ./
-
-# Install poetry and dependencies
-RUN pip install --no-cache-dir poetry && \
-    poetry config virtualenvs.create false && \
-    poetry install --no-dev --no-interaction --no-ansi
-
-# Copy application code
+# Copy project files
+COPY pyproject.toml ./
 COPY src/ ./src/
+
+# Install dependencies using uv (no virtual environment in container)
+RUN uv pip install --system -e .
 
 # Create non-root user
 RUN useradd --create-home --shell /bin/bash weather && \

@@ -17,7 +17,15 @@ High-performance weather data ingestion API and analytics server for Raspberry P
 
 ```bash
 cd server
-poetry install
+
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.cargo/bin:$PATH"
+
+# Create virtual environment and install dependencies
+uv venv
+source .venv/bin/activate
+uv pip install -e .
 ```
 
 ### Docker Deployment (Recommended)
@@ -52,13 +60,13 @@ LOG_LEVEL=INFO
 ### Run directly
 
 ```bash
-poetry run weather-server
+uv run weather-server
 ```
 
 ### Run with custom settings
 
 ```bash
-poetry run weather-server \
+uv run weather-server \
   --host 0.0.0.0 \
   --port 8080 \
   --influxdb-url http://localhost:8086
@@ -67,7 +75,7 @@ poetry run weather-server \
 ### Run as module
 
 ```bash
-poetry run python -m weather_server
+uv run python -m weather_server
 ```
 
 ## API Endpoints
