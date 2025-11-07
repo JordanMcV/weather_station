@@ -88,9 +88,12 @@ async def run_collector(config: Config, show_status: bool = False):
         return
 
     # Setup signal handlers for graceful shutdown
+    loop = asyncio.get_running_loop()
+
     def signal_handler(signum, frame):
         logging.info(f"Received signal {signum}, shutting down...")
-        asyncio.create_task(collector.stop())
+        # Schedule stop() on the event loop from the signal handler
+        loop.call_soon_threadsafe(lambda: asyncio.create_task(collector.stop()))
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
@@ -99,9 +102,12 @@ async def run_collector(config: Config, show_status: bool = False):
         await collector.start()
     except KeyboardInterrupt:
         logging.info("Shutting down collector...")
+        await collector.stop()
     except Exception as e:
         logging.error(f"Collector error: {e}")
         raise
+    finally:
+        await collector.stop()
 
 
 def main():

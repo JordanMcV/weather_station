@@ -31,6 +31,7 @@ class WeatherCollector:
 
         self.running = False
         self.last_upload = None
+        self.tasks = []
 
     async def start(self):
         """Start the weather collection service."""
@@ -40,18 +41,18 @@ class WeatherCollector:
         # Start background tasks
         if self.config.dry_run:
             # In dry-run mode, only collect readings (no upload task)
-            tasks = [
+            self.tasks = [
                 asyncio.create_task(self._collect_readings()),
             ]
         else:
             # Normal mode: collect and upload
-            tasks = [
+            self.tasks = [
                 asyncio.create_task(self._collect_readings()),
                 asyncio.create_task(self._upload_readings()),
             ]
 
         try:
-            await asyncio.gather(*tasks)
+            await asyncio.gather(*self.tasks)
         except asyncio.CancelledError:
             logger.info("Weather collector stopped")
         finally:
@@ -59,8 +60,25 @@ class WeatherCollector:
 
     async def stop(self):
         """Stop the weather collection service."""
+        if not self.running:
+            return
+
         logger.info("Stopping weather collector...")
         self.running = False
+
+        # Cancel all running tasks
+        for task in self.tasks:
+            if not task.done():
+                task.cancel()
+
+        # Wait for tasks to finish cancellation
+        if self.tasks:
+            try:
+                await asyncio.gather(*self.tasks, return_exceptions=True)
+            except Exception as e:
+                logger.debug(f"Task cancellation completed: {e}")
+
+        logger.info("Weather collector stopped successfully")
 
     async def _collect_readings(self):
         """Continuously collect weather readings from the sensor."""
