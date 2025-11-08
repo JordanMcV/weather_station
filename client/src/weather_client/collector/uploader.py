@@ -18,7 +18,7 @@ class WeatherUploader:
             timeout=30.0,
             headers={
                 "Content-Type": "application/json",
-                "X-API-Key": config.api_key,
+                "Authorization": f"Bearer {config.api_key}",
             }
         )
 
