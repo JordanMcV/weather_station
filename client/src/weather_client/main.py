@@ -6,6 +6,8 @@ import logging
 import signal
 import sys
 from argparse import ArgumentParser
+from PIL import Image, ImageDraw
+from st7789 import ST7789
 
 from .config import Config
 from .collector.service import WeatherCollector
@@ -117,6 +119,22 @@ def main():
 
     # Load configuration from environment
     config = Config.from_env()
+
+    # The display backlight impacts the temperature readings, so turn it off
+    # First set up the display, then generate a black image to show, then turn
+    # off the backlight
+    disp = ST7789(
+       rotation=90,
+        port=0,
+        cs=1,
+        dc=9,
+        backlight=12,
+    )
+    WIDTH = disp.width
+    HEIGHT = disp.height
+    image = Image.new("RGB", (WIDTH, HEIGHT), (0, 0, 0))
+    disp.display(image)
+    disp.set_backlight(0)
 
     # Override config with command line arguments
     if args.server_url:

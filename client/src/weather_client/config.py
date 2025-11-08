@@ -46,7 +46,7 @@ class Config:
             retry_max_delay=float(os.getenv("RETRY_MAX_DELAY", "60.0")),
             database_path=os.getenv("DATABASE_PATH", "/tmp/weather.db"),
             sensor_read_interval=float(os.getenv("SENSOR_READ_INTERVAL", "15.0")),
-            temperature_offset=float(os.getenv("TEMPERATURE_OFFSET", "-6.0")),
+            temperature_offset=float(os.getenv("TEMPERATURE_OFFSET", "-0.5")),
             station_id=os.getenv("STATION_ID", "piw"),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
         )
