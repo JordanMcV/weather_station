@@ -5,11 +5,13 @@ Dual Raspberry Pi weather station system with weatherhat sensor hardware, Influx
 
 **MONOREPO STRUCTURE**: This project is organized as a monorepo with completely separated client and server codebases:
 - `client/` - Lightweight Pi Zero collector (minimal dependencies)
-- `server/` - Full-featured Pi 5 API server (InfluxDB, FastAPI, Grafana)
+- `server/` - Full-featured pi4 API server (InfluxDB, FastAPI, Grafana)
 
 ## Hardware Setup
-- **Pi W (piw)**: Weather station collector - underpowered, slow network, weatherhat hardware
-- **Pi 5**: Analytics server - powerful, fast network, InfluxDB + Grafana
+- **Pi W (piw)**: Weather station collector - underpowered, slow network, weatherhat hardware. LAN only, not on the tailnet.
+- **pi4**: Analytics server - InfluxDB + Grafana + FastAPI, in Docker Compose. Also runs Pi-hole, which holds ports 80 and 443.
+
+The server runs on pi4, not pi5. Older revisions of this document said pi5.
 
 ## Recommended Architecture
 
@@ -33,7 +35,7 @@ Dual Raspberry Pi weather station system with weatherhat sensor hardware, Influx
 - **Retry Logic**: Exponential backoff for failed uploads
 - **Health Monitor**: System status, disk space, network connectivity
 
-### Pi 4 (Server Mode) - Analytics & Storage
+### pi4 (Server Mode) - Analytics & Storage
 ```
 ┌─────────────────────────────────────┐
 │              Pi 4                   │
@@ -56,7 +58,7 @@ Dual Raspberry Pi weather station system with weatherhat sensor hardware, Influx
 ## Data Flow Architecture
 
 ```
-Pi W (Collector)                    Pi 5 (Server)
+Pi W (Collector)                    pi4 (Server)
 ┌─────────────┐                    ┌─────────────┐
 │ WeatherHat  │                    │             │
 │   Sensor    │                    │  HTTP API   │
@@ -88,7 +90,7 @@ Pi W (Collector)                    Pi 5 (Server)
 - **Endpoint**: `POST /api/v1/weather/batch`
 - **Authentication**: API key in header
 - **Payload**: JSON array of readings
-- **Compression**: gzip for bandwidth efficiency
+- **Compression**: gzip request bodies for batches of 10 readings or more. The server decompresses them in `GzipRequestMiddleware`.
 - **Retry**: Exponential backoff (1s, 2s, 4s, 8s, max 60s)
 
 ### Data Format
@@ -122,7 +124,7 @@ Pi W (Collector)                    Pi 5 (Server)
 - **Local Storage**: SQLite in `/data/weather.db`
 - **Resource Optimization**: Minimal dependencies, no containerization overhead
 
-### Pi 5 (Server) - Docker Compose
+### pi4 (Server) - Docker Compose
 - **Deployment**: Docker Compose stack
 - **Components**: InfluxDB + Grafana + FastAPI server
 - **Data Retention**: 1 year raw data, 5 years aggregated
@@ -137,16 +139,16 @@ Pi W (Collector)                    Pi 5 (Server)
 - Data deduplication on server side
 
 ### Data Integrity
-- Checksum validation
-- Timestamp validation
-- Sensor range validation
-- Duplicate detection
+- Sensor range validation (implemented, see `WeatherReading.validate`)
+- Timestamp validation (partial, ranges are not checked)
+- Checksum validation (not implemented)
+- Duplicate detection (not implemented)
 
 ### Monitoring
-- Health check endpoints
-- Data freshness alerts
-- Disk space monitoring
-- Network connectivity status
+- Health check endpoints (implemented)
+- Client health reporting to `/api/v1/health/system` (implemented)
+- Disk space and network status in the health payload (implemented)
+- Data freshness alerts (not implemented)
 
 ## Monorepo Structure
 
@@ -163,7 +165,7 @@ weather_station/
 │   ├── .env.example          # Environment configuration
 │   └── README.md             # Bare metal installation guide
 │
-├── server/                    # Pi 5 server package (DOCKER)
+├── server/                    # pi4 server package (DOCKER)
 │   ├── src/weather_server/
 │   │   ├── api/              # FastAPI routes & InfluxDB client
 │   │   ├── config.py         # Server-only configuration
@@ -196,7 +198,7 @@ source .venv/bin/activate
 uv pip install -e .
 
 # Run collector (development)
-uv run weather-client --server-url http://pi5:8080 --api-key your-key
+uv run weather-client --server-url http://pi4:8080 --api-key your-key
 
 # Check buffer status
 uv run weather-client --status
@@ -209,7 +211,7 @@ sudo systemctl start weather-client
 sudo systemctl status weather-client
 ```
 
-### Server (Pi 5) Setup
+### Server (pi4) Setup
 ```bash
 cd server
 
@@ -235,13 +237,16 @@ curl http://localhost:8080/api/v1/health
 ## Configuration Files
 
 ### Client Environment Variables (client/.env)
-- `SERVER_URL`: Pi 5 API endpoint
+- `SERVER_URL`: pi4 API endpoint
 - `API_KEY`: Authentication key
 - `STATION_ID`: Station identifier
 - `UPLOAD_INTERVAL`: Seconds between uploads
 - `SENSOR_READ_INTERVAL`: Sensor polling interval
 - `DATABASE_PATH`: SQLite buffer path
 - `TEMPERATURE_OFFSET`: Sensor calibration
+- `ENABLED_SENSORS`: Optional sensors to read, from `wind` and `rain`. Temperature, humidity and pressure always read.
+- `HEALTH_UPLOAD_INTERVAL`: Seconds between health reports
+- `DRY_RUN`: Set true to log readings without buffering or uploading
 
 ### Server Environment Variables (server/.env)
 - `SERVER_HOST`: API bind host
@@ -251,6 +256,7 @@ curl http://localhost:8080/api/v1/health
 - `INFLUXDB_ORG`: InfluxDB organization
 - `INFLUXDB_BUCKET`: InfluxDB bucket name
 - `API_KEY`: Client authentication key
+- `CORS_ALLOW_ORIGINS`: Comma separated browser origins. Empty keeps CORS off.
 
 ### Grafana Dashboards
 - Real-time weather conditions

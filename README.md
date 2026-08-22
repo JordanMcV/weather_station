@@ -6,19 +6,19 @@ Dual Raspberry Pi weather monitoring system with separated client and server cod
 
 This is a **monorepo** with two fully independent packages:
 
-- **`client/`** - Lightweight Pi Zero collector (WeatherHAT sensor)
-- **`server/`** - Full-featured Pi 5 API + InfluxDB + Grafana
+- **`client/`** - Lightweight Pi Zero W collector (WeatherHAT sensor), on bare metal
+- **`server/`** - API + InfluxDB + Grafana on pi4, in Docker Compose
 
 ### Why Monorepo?
 
 - ✅ **Complete separation** - No shared code or dependencies
 - ✅ **Optimized builds** - Client is minimal (no FastAPI/InfluxDB), Server has no WeatherHAT
-- ✅ **Independent deployment** - Each package has its own Docker setup
+- ✅ **Independent deployment** - The client runs on bare metal, the server runs in Docker
 - ✅ **Clear boundaries** - Models are intentionally duplicated to prevent coupling
 
 ## 📦 Packages
 
-### Client (Pi Zero)
+### Client (Pi Zero W)
 ```bash
 cd client/
 # Install with uv (blazing fast!)
@@ -27,29 +27,28 @@ uv pip install -e .
 uv run weather-client
 ```
 
-**Dependencies:** weatherhat, httpx, psutil
+**Dependencies:** weatherhat, st7789, pillow, httpx, psutil
 **Package Manager:** [uv](https://github.com/astral-sh/uv) (extremely fast, perfect for Pi Zero)
-**Size:** Minimal - optimized for Pi Zero
+**Deployment:** Bare metal with a systemd unit. There is no client Dockerfile.
 **Purpose:** Collect sensor data, buffer locally, upload to server
 
 [📖 Client README](./client/README.md)
 
-### Server (Pi 5)
+### Server (pi4)
 ```bash
 cd server/
-docker-compose up -d
+docker compose up -d
 ```
 
 **Dependencies:** fastapi, uvicorn, influxdb-client
-**Package Manager:** Poetry
-**Size:** Full-featured
+**Package Manager:** [uv](https://github.com/astral-sh/uv)
 **Purpose:** Ingest data via REST API, store in InfluxDB, visualize with Grafana
 
 [📖 Server README](./server/README.md)
 
 ## 🚀 Quick Start
 
-### 1. Set up Server (Pi 5)
+### 1. Set up Server (pi4)
 
 ```bash
 cd server
@@ -57,43 +56,44 @@ cp .env.example .env
 # Edit .env with your credentials
 
 # Start InfluxDB + Grafana + API
-docker-compose up -d
+docker compose up -d
 
 # Check health
 curl http://localhost:8080/api/v1/health
 ```
 
-### 2. Set up Client (Pi Zero)
+### 2. Set up Client (Pi Zero W)
 
 ```bash
 cd client
 cp .env.example .env
 # Edit .env with server URL and API key
 
-# Run collector
-docker-compose up -d
+# Run the collector directly
+uv run weather-client
 
-# Or run directly
-poetry run weather-client
+# Install as a service for production
+sudo cp weather-client.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now weather-client
 ```
 
 ## 📊 Accessing Services
 
-- **Weather API:** http://localhost:8080
-- **Grafana:** http://localhost:3000 (admin/password from .env)
-- **InfluxDB:** http://localhost:8086
+- **Weather API:** http://pi4:8080
+- **Grafana:** http://pi4:3000 (admin/password from .env)
+- **InfluxDB:** http://pi4:8086
 
 ## 🏛️ Project Structure
 
 ```
 weather_station/
-├── client/              # Pi Zero collector
+├── client/              # Pi Zero W collector, bare metal
 │   ├── src/weather_client/
 │   ├── pyproject.toml   # Minimal deps
-│   ├── Dockerfile
-│   └── docker-compose.yaml
+│   └── weather-client.service
 │
-├── server/              # Pi 5 server
+├── server/              # pi4 server, Docker
 │   ├── src/weather_server/
 │   ├── pyproject.toml   # Server deps
 │   ├── Dockerfile
@@ -112,32 +112,41 @@ cd client
 uv venv && source .venv/bin/activate
 uv pip install -e .
 uv run weather-client --status
+
+# Log readings without buffering or uploading
+uv run weather-client --dry-run
+
+# Choose which optional sensors to read
+uv run weather-client --enabled-sensors wind
 ```
+
+Set `ENABLED_SENSORS` to pick the optional sensors. Choose from `wind` and
+`rain`. Temperature, humidity and pressure come from the BME280 and are always
+read. The rain gauge is disabled by default, because it does not register water.
 
 ### Server Development
 ```bash
 cd server
-poetry install
-poetry run weather-server --port 8080
+uv venv && source .venv/bin/activate
+uv pip install -e .
+uv run weather-server --port 8080
 ```
 
-## 🐳 Docker Deployment
+## 🐳 Deployment
 
-### Client (Pi Zero)
-```bash
-cd client
-docker-compose up -d
-```
+### Client (Pi Zero W)
 
-Requires I2C/SPI device access for WeatherHAT.
+The client runs on bare metal, because Docker wastes memory on a Pi Zero. It
+needs I2C and SPI access for the WeatherHAT. Deploy it with the systemd unit in
+`client/weather-client.service`.
 
-### Server (Pi 5)
+### Server (pi4)
 ```bash
 cd server
-docker-compose up -d
+docker compose up -d
 ```
 
-Starts complete stack: InfluxDB, Grafana, Weather API.
+Starts the complete stack: InfluxDB, Grafana, Weather API.
 
 ## 📝 Configuration
 
@@ -150,7 +159,7 @@ Each package has its own `.env.example` file:
 ## 🌐 Data Flow
 
 ```
-Pi Zero (Client)          →      Pi 5 (Server)
+Pi Zero W (Client)        →      pi4 (Server)
 ┌──────────────┐                ┌──────────────┐
 │ WeatherHAT   │                │ FastAPI      │
 │ Sensor       │                │ REST API     │
