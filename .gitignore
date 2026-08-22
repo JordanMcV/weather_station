@@ -1,2 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment and secrets
+.env
+.env.local
+
+# Local data
+*.db
+*.sqlite3
+
+# Runtime volumes and generated config. Grafana provisioning is committed.
 grafana/*
 influxdb/*
+server/influxdb-config/*
+
+# Planning documents
+*_PLAN.md
+*_SDD.md
+
+# macOS
+.DS_Store
