@@ -2,24 +2,29 @@
 Description=Weather Station Client
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=5
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/weather_station/client
-Environment="PATH=/home/pi/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
-ExecStart=/home/pi/.cargo/bin/uv run weather-client
-Restart=always
-Environment="SERVER_URL=http://pi4:8080"
-Environment="API_KEY=your-api-key-here"
-Environment="STATION_ID=piw"
-Environment="UPLOAD_INTERVAL=300"
-Environment="HEALTH_UPLOAD_INTERVAL=300"
-Environment="DATABASE_PATH=/data/weather.db"
-Environment="TEMPERATURE_OFFSET=-6.0"
-Environment="ENABLED_SENSORS=wind"
-Environment="LOG_LEVEL=INFO"
-RestartSec=10
+User=jordan
+Group=jordan
+WorkingDirectory=/home/jordan/projects/weather_station/client
+
+# Settings and secrets live outside the repository. Copy .env.example to
+# /etc/weather-client.env and set API_KEY there.
+EnvironmentFile=/etc/weather-client.env
+
+ExecStart=/home/jordan/projects/weather_station/client/.venv/bin/weather-client
+
+# Provides /var/lib/weather-client for the SQLite buffer.
+StateDirectory=weather-client
+
+Restart=on-failure
+RestartSec=30
+
+# The collector shuts down in well under a second. Do not wait 90.
+TimeoutStopSec=20
 
 [Install]
 WantedBy=multi-user.target

@@ -84,7 +84,26 @@ class WeatherCollector:
         if self.uploader:
             await self.uploader.close()
 
+        self._stop_sensor_polling()
+
         logger.info("Weather collector stopped successfully")
+
+    def _stop_sensor_polling(self):
+        """Stop the WeatherHAT interrupt polling thread.
+
+        The library starts that thread without the daemon flag and only clears
+        its loop condition from __del__, which the interpreter does not run in
+        time. The interpreter then waits for the thread at shutdown, so the
+        process never exits and systemd kills it after the stop timeout.
+        """
+        thread = getattr(self.sensor, "_poll_thread", None)
+        if thread is None:
+            return
+
+        self.sensor._polling = False
+        thread.join(timeout=5)
+        if thread.is_alive():
+            logger.warning("WeatherHAT polling thread did not stop within 5 seconds")
 
     async def _collect_readings(self):
         """Continuously collect weather readings from the sensor."""
