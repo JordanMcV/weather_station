@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 import weatherhat
 import psutil
 
@@ -91,7 +91,7 @@ class WeatherCollector:
 
                 # Create weather reading
                 reading = WeatherReading(
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     temperature=self.sensor.temperature,
                     humidity=self.sensor.humidity,
                     pressure=self.sensor.pressure,
@@ -132,21 +132,21 @@ class WeatherCollector:
 
         while self.running:
             try:
-                pending_readings = self.buffer.get_pending_readings()
+                pending = self.buffer.get_pending_readings()
 
-                if pending_readings:
-                    logger.info(f"Attempting to upload {len(pending_readings)} readings")
+                if pending:
+                    logger.info(f"Attempting to upload {len(pending)} readings")
 
                     batch = WeatherBatch(
-                        readings=pending_readings,
+                        readings=[item.reading for item in pending],
                         station_id=self.config.station_id
                     )
 
                     success = await self.uploader.upload_batch(batch)
                     if success:
-                        self.buffer.mark_uploaded(pending_readings)
-                        self.last_upload = datetime.utcnow()
-                        logger.info(f"Successfully uploaded {len(pending_readings)} readings")
+                        self.buffer.mark_uploaded([item.row_id for item in pending])
+                        self.last_upload = datetime.now(timezone.utc)
+                        logger.info(f"Successfully uploaded {len(pending)} readings")
                     else:
                         logger.warning("Failed to upload readings, will retry later")
                 else:
@@ -183,7 +183,7 @@ class WeatherCollector:
             buffer_size = 0 if self.config.dry_run else self.buffer.get_buffer_size()
 
             return SystemHealth(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 station_id=self.config.station_id,
                 cpu_percent=cpu_percent,
                 memory_percent=memory.percent,
@@ -197,7 +197,7 @@ class WeatherCollector:
             logger.error(f"Error getting system status: {e}")
             buffer_size = 0 if self.config.dry_run else (self.buffer.get_buffer_size() if self.buffer else 0)
             return SystemHealth(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 station_id=self.config.station_id,
                 cpu_percent=0.0,
                 memory_percent=0.0,
@@ -208,17 +208,15 @@ class WeatherCollector:
 
     def _test_network_connectivity(self) -> bool:
         """Test network connectivity to the server."""
+        import socket
+        from urllib.parse import urlparse
+
+        parsed = urlparse(self.config.server_url)
+        host = parsed.hostname or "localhost"
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+
         try:
-            # Simple connectivity test - try to resolve the server hostname
-            import socket
-            from urllib.parse import urlparse
-
-            parsed = urlparse(self.config.server_url)
-            host = parsed.hostname or "localhost"
-            port = parsed.port or 80
-
-            socket.setdefaulttimeout(5)
-            socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
-            return True
-        except (socket.error, socket.timeout):
+            with socket.create_connection((host, port), timeout=5):
+                return True
+        except OSError:
             return False

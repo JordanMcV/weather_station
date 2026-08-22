@@ -2,7 +2,8 @@
 
 import sqlite3
 import logging
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
 
@@ -10,6 +11,14 @@ from ..models import WeatherReading
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class BufferedReading:
+    """A reading paired with its buffer row id, so uploads mark exact rows."""
+
+    row_id: int
+    reading: WeatherReading
 
 
 class SQLiteBuffer:
@@ -61,7 +70,7 @@ class SQLiteBuffer:
                     reading.wind_speed,
                     reading.wind_direction,
                     reading.rain_total,
-                    datetime.utcnow().isoformat()
+                    datetime.now(timezone.utc).isoformat()
                 ))
                 conn.commit()
 
@@ -73,51 +82,53 @@ class SQLiteBuffer:
             logger.error(f"Failed to add reading to buffer: {e}")
             return False
 
-    def get_pending_readings(self, limit: Optional[int] = None) -> List[WeatherReading]:
-        """Get readings that haven't been uploaded yet."""
+    def get_pending_readings(self, limit: Optional[int] = None) -> List[BufferedReading]:
+        """Get readings that haven't been uploaded yet, each with its row id."""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 query = """
-                    SELECT timestamp, temperature, humidity, pressure, wind_speed, wind_direction, rain_total
+                    SELECT id, timestamp, temperature, humidity, pressure, wind_speed, wind_direction, rain_total
                     FROM weather_readings
                     WHERE uploaded = FALSE
                     ORDER BY timestamp ASC
                 """
+                params: List[int] = []
                 if limit:
-                    query += f" LIMIT {limit}"
+                    query += " LIMIT ?"
+                    params.append(limit)
 
-                cursor = conn.execute(query)
-                readings = []
+                cursor = conn.execute(query, params)
+                buffered = []
 
                 for row in cursor.fetchall():
-                    timestamp = datetime.fromisoformat(row[0])
                     reading = WeatherReading(
-                        timestamp=timestamp,
-                        temperature=row[1],
-                        humidity=row[2],
-                        pressure=row[3],
-                        wind_speed=row[4],
-                        wind_direction=row[5],
-                        rain_total=row[6]
+                        timestamp=datetime.fromisoformat(row[1]),
+                        temperature=row[2],
+                        humidity=row[3],
+                        pressure=row[4],
+                        wind_speed=row[5],
+                        wind_direction=row[6],
+                        rain_total=row[7]
                     )
-                    readings.append(reading)
+                    buffered.append(BufferedReading(row_id=row[0], reading=reading))
 
-                return readings
+                return buffered
         except sqlite3.Error as e:
             logger.error(f"Failed to get pending readings: {e}")
             return []
 
-    def mark_uploaded(self, readings: List[WeatherReading]) -> bool:
-        """Mark readings as uploaded."""
+    def mark_uploaded(self, row_ids: List[int]) -> bool:
+        """Mark buffer rows as uploaded by primary key."""
+        if not row_ids:
+            return True
         try:
             with sqlite3.connect(self.db_path) as conn:
-                timestamps = [r.timestamp.isoformat() for r in readings]
-                placeholders = ",".join("?" * len(timestamps))
+                placeholders = ",".join("?" * len(row_ids))
                 conn.execute(f"""
                     UPDATE weather_readings
                     SET uploaded = TRUE
-                    WHERE timestamp IN ({placeholders})
-                """, timestamps)
+                    WHERE id IN ({placeholders})
+                """, row_ids)
                 conn.commit()
             return True
         except sqlite3.Error as e:
@@ -151,11 +162,16 @@ class SQLiteBuffer:
 
         if total_count > self.max_size:
             excess = total_count - self.max_size
+            # SQLite is normally built without UPDATE/DELETE LIMIT support, so
+            # select the rows to drop with a subquery instead.
             conn.execute("""
                 DELETE FROM weather_readings
-                WHERE uploaded = TRUE
-                ORDER BY created_at ASC
-                LIMIT ?
+                WHERE id IN (
+                    SELECT id FROM weather_readings
+                    WHERE uploaded = TRUE
+                    ORDER BY created_at ASC
+                    LIMIT ?
+                )
             """, (excess,))
 
     def clear_uploaded(self) -> int:
