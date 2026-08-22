@@ -22,6 +22,11 @@ class Config:
     influxdb_org: str = "weather"
     influxdb_bucket: str = "weather_data"
 
+    # Timestamp acceptance window. The collector has no real time clock and
+    # depends on NTP at boot, so a wrong clock must not pollute the database.
+    max_timestamp_future_seconds: int = 3600
+    max_timestamp_age_days: int = 30
+
     # Security
     api_key: str = "your-api-key-here"
 
@@ -42,6 +47,8 @@ class Config:
             influxdb_token=os.getenv("INFLUXDB_TOKEN"),
             influxdb_org=os.getenv("INFLUXDB_ORG", "weather"),
             influxdb_bucket=os.getenv("INFLUXDB_BUCKET", "weather_data"),
+            max_timestamp_future_seconds=int(os.getenv("MAX_TIMESTAMP_FUTURE_SECONDS", "3600")),
+            max_timestamp_age_days=int(os.getenv("MAX_TIMESTAMP_AGE_DAYS", "30")),
             api_key=os.getenv("API_KEY", "your-api-key-here"),
             cors_allow_origins=parse_origins(os.getenv("CORS_ALLOW_ORIGINS", "")),
             log_level=os.getenv("LOG_LEVEL", "INFO"),

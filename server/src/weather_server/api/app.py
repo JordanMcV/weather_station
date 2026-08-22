@@ -3,7 +3,8 @@
 import gzip
 import logging
 import zlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from typing import List, Tuple
 
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -84,6 +85,45 @@ class GzipRequestMiddleware:
         await self.app(scope, replay, send)
 
 
+def as_utc(moment: datetime) -> datetime:
+    """Treat a naive timestamp as UTC, so old and new collectors compare alike."""
+    if moment.tzinfo is None:
+        return moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(timezone.utc)
+
+
+def partition_readings(batch: WeatherBatch, config: Config) -> Tuple[List, List[str]]:
+    """Split a batch into readings worth storing and reasons for the rest.
+
+    Rejecting the whole batch would be worse than dropping a bad reading. The
+    collector treats 400 as permanent, so it would keep the batch buffered for
+    ever and the buffer would grow without limit.
+    """
+    now = datetime.now(timezone.utc)
+    latest = now + timedelta(seconds=config.max_timestamp_future_seconds)
+    earliest = now - timedelta(days=config.max_timestamp_age_days)
+
+    accepted = []
+    rejections = []
+
+    for reading in batch.readings:
+        if not reading.validate():
+            rejections.append("sensor value out of range")
+            continue
+
+        moment = as_utc(reading.timestamp)
+        if moment > latest:
+            rejections.append(f"timestamp {moment.isoformat()} is too far in the future")
+            continue
+        if moment < earliest:
+            rejections.append(f"timestamp {moment.isoformat()} is too old")
+            continue
+
+        accepted.append(reading)
+
+    return accepted, rejections
+
+
 def create_app(config: Config) -> FastAPI:
     app = FastAPI(
         title="Weather Station API",
@@ -153,30 +193,46 @@ def create_app(config: Config) -> FastAPI:
     ):
         """Ingest a batch of weather readings."""
         try:
-            # Parse and validate the batch
             batch = WeatherBatch.from_dict(batch_data)
 
-            if not batch.validate():
+            if not batch.readings or not batch.station_id:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid weather data in batch"
+                    detail="Batch must name a station and carry at least one reading"
                 )
 
-            # Store in InfluxDB
-            success = await influx_client.write_batch(batch)
+            accepted, rejections = partition_readings(batch, config)
 
-            if not success:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to store weather data"
+            if rejections:
+                logger.warning(
+                    "[Weather API] Discarded readings that failed validation",
+                    extra={
+                        "batch_id": batch.batch_id,
+                        "station_id": batch.station_id,
+                        "rejected_count": len(rejections),
+                        "first_reasons": rejections[:5],
+                    },
                 )
 
-            logger.info(f"Successfully ingested batch {batch.batch_id} with {len(batch.readings)} readings from {batch.station_id}")
+            if accepted:
+                stored = WeatherBatch(
+                    readings=accepted,
+                    station_id=batch.station_id,
+                    batch_id=batch.batch_id,
+                )
+                if not await influx_client.write_batch(stored):
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Failed to store weather data"
+                    )
+
+            logger.info(f"Successfully ingested batch {batch.batch_id} with {len(accepted)} readings from {batch.station_id}")
 
             return {
                 "status": "success",
                 "batch_id": batch.batch_id,
-                "readings_count": len(batch.readings),
+                "readings_count": len(accepted),
+                "rejected_count": len(rejections),
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
 
