@@ -1,11 +1,16 @@
 """FastAPI application for weather data ingestion."""
 
+import gzip
 import logging
+import zlib
 from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.datastructures import Headers
+from starlette.responses import JSONResponse
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from ..config import Config
 from ..models import WeatherBatch, SystemHealth
@@ -16,12 +21,75 @@ logger = logging.getLogger(__name__)
 security = HTTPBearer()
 
 
+class GzipRequestMiddleware:
+    """Decompress request bodies that arrive with Content-Encoding: gzip.
+
+    The collector compresses larger batches to save bandwidth on a slow link.
+    Starlette does not decompress request bodies, so do it here.
+    """
+
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        encoding = Headers(scope=scope).get("content-encoding", "").lower()
+        if "gzip" not in encoding:
+            await self.app(scope, receive, send)
+            return
+
+        body = bytearray()
+        more_body = True
+        while more_body:
+            message = await receive()
+            if message["type"] != "http.request":
+                break
+            body.extend(message.get("body", b""))
+            more_body = message.get("more_body", False)
+
+        try:
+            payload = gzip.decompress(bytes(body))
+        except (OSError, EOFError, zlib.error):
+            logger.warning("[Weather API] Rejected a malformed gzip request body")
+            response = JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"detail": "Malformed gzip request body"},
+            )
+            await response(scope, receive, send)
+            return
+
+        headers = [
+            (name, value)
+            for name, value in scope["headers"]
+            if name.lower() not in (b"content-encoding", b"content-length")
+        ]
+        headers.append((b"content-length", str(len(payload)).encode("latin-1")))
+        scope = dict(scope, headers=headers)
+
+        replayed = False
+
+        async def replay() -> Message:
+            nonlocal replayed
+            if replayed:
+                return {"type": "http.disconnect"}
+            replayed = True
+            return {"type": "http.request", "body": payload, "more_body": False}
+
+        await self.app(scope, replay, send)
+
+
 def create_app(config: Config) -> FastAPI:
     app = FastAPI(
         title="Weather Station API",
         description="Weather data ingestion API for dual-Pi weather station",
         version="0.1.0"
     )
+
+    # Decompress gzip request bodies before routing
+    app.add_middleware(GzipRequestMiddleware)
 
     # Add CORS middleware
     app.add_middleware(
