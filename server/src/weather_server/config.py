@@ -1,8 +1,13 @@
 """Configuration for weather server."""
 
 import os
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import List, Optional
+
+
+def parse_origins(raw: str) -> List[str]:
+    """Parse a comma separated list of allowed CORS origins."""
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
 @dataclass
@@ -20,6 +25,10 @@ class Config:
     # Security
     api_key: str = "your-api-key-here"
 
+    # Browser access. The collector is server to server, so CORS stays off
+    # unless a browser client needs it.
+    cors_allow_origins: List[str] = field(default_factory=list)
+
     # Logging
     log_level: str = "INFO"
 
@@ -34,5 +43,6 @@ class Config:
             influxdb_org=os.getenv("INFLUXDB_ORG", "weather"),
             influxdb_bucket=os.getenv("INFLUXDB_BUCKET", "weather_data"),
             api_key=os.getenv("API_KEY", "your-api-key-here"),
+            cors_allow_origins=parse_origins(os.getenv("CORS_ALLOW_ORIGINS", "")),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
         )

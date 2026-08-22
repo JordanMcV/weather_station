@@ -3,7 +3,7 @@
 import gzip
 import logging
 import zlib
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -91,14 +91,16 @@ def create_app(config: Config) -> FastAPI:
     # Decompress gzip request bodies before routing
     app.add_middleware(GzipRequestMiddleware)
 
-    # Add CORS middleware
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # Only expose CORS when a browser origin is configured. Credentialed
+    # requests need explicit origins, so never pair them with a wildcard.
+    if config.cors_allow_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=config.cors_allow_origins,
+            allow_credentials=True,
+            allow_methods=["GET", "POST"],
+            allow_headers=["Authorization", "Content-Type", "Content-Encoding"],
+        )
 
     # Initialize InfluxDB client
     influx_client = InfluxDBClient(config)
@@ -127,7 +129,7 @@ def create_app(config: Config) -> FastAPI:
 
             return {
                 "status": "healthy" if influx_healthy else "degraded",
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "services": {
                     "influxdb": "healthy" if influx_healthy else "unhealthy",
                     "api": "healthy"
@@ -137,7 +139,7 @@ def create_app(config: Config) -> FastAPI:
             logger.error(f"Health check failed: {e}")
             return {
                 "status": "unhealthy",
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "error": str(e)
             }
 
@@ -172,7 +174,7 @@ def create_app(config: Config) -> FastAPI:
                 "status": "success",
                 "batch_id": batch.batch_id,
                 "readings_count": len(batch.readings),
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
 
         except ValueError as e:
@@ -220,7 +222,7 @@ def create_app(config: Config) -> FastAPI:
 
             return {
                 "status": "success",
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
 
         except ValueError as e:

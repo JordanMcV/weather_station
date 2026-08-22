@@ -1,7 +1,7 @@
 """InfluxDB client for weather data storage."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Any
 
 from influxdb_client import InfluxDBClient as InfluxClient, Point
@@ -164,7 +164,7 @@ class InfluxDBClient:
             return {
                 "weather_readings_24h": weather_count,
                 "health_records_24h": health_count,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
 
         except Exception as e:
@@ -172,7 +172,7 @@ class InfluxDBClient:
             return {
                 "weather_readings_24h": 0,
                 "health_records_24h": 0,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "error": str(e)
             }
 
