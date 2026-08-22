@@ -1,0 +1,15 @@
+apiVersion: 1
+
+providers:
+  - name: weather-station
+    orgId: 1
+    folder: Weather Station
+    type: file
+    disableDeletion: false
+    # Edits made in the user interface are overwritten from these files, so
+    # change a dashboard in the repository, not in Grafana.
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false

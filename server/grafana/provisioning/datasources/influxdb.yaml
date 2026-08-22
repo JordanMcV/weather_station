@@ -1,0 +1,24 @@
+apiVersion: 1
+
+# Remove the datasource that was added by hand, so this file is the only
+# definition and a rebuild reproduces it.
+deleteDatasources:
+  - name: influxdb
+    orgId: 1
+
+datasources:
+  - name: influxdb
+    uid: weather-influxdb
+    type: influxdb
+    access: proxy
+    url: http://influxdb:8086
+    isDefault: true
+    editable: false
+    jsonData:
+      version: Flux
+      organization: ${INFLUXDB_ORG}
+      defaultBucket: ${INFLUXDB_BUCKET}
+      httpMode: POST
+      timeout: 30
+    secureJsonData:
+      token: ${INFLUXDB_TOKEN}
