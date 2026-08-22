@@ -9,6 +9,7 @@ dependencies = [
     "httpx>=0.25.0",
     "pillow>=12.0.0",
     "psutil>=5.9.0",
+    "st7789>=1.0.1 ; sys_platform == 'linux'",
     "weatherhat>=1.0.0 ; sys_platform == 'linux'",
 ]
 

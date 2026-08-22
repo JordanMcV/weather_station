@@ -6,11 +6,25 @@ import logging
 import signal
 import sys
 from argparse import ArgumentParser
-from PIL import Image, ImageDraw
-from st7789 import ST7789
 
 from .config import ALL_OPTIONAL_SENSORS, Config, parse_enabled_sensors
 from .collector.service import WeatherCollector
+
+
+def disable_display():
+    """Turn the ST7789 backlight off, because it warms the temperature sensor."""
+    from PIL import Image
+    from st7789 import ST7789
+
+    disp = ST7789(
+        rotation=90,
+        port=0,
+        cs=1,
+        dc=9,
+        backlight=12,
+    )
+    disp.display(Image.new("RGB", (disp.width, disp.height), (0, 0, 0)))
+    disp.set_backlight(0)
 
 
 def setup_logging(level: str):
@@ -124,22 +138,6 @@ def main():
     # Load configuration from environment
     config = Config.from_env()
 
-    # The display backlight impacts the temperature readings, so turn it off
-    # First set up the display, then generate a black image to show, then turn
-    # off the backlight
-    disp = ST7789(
-       rotation=90,
-        port=0,
-        cs=1,
-        dc=9,
-        backlight=12,
-    )
-    WIDTH = disp.width
-    HEIGHT = disp.height
-    image = Image.new("RGB", (WIDTH, HEIGHT), (0, 0, 0))
-    disp.display(image)
-    disp.set_backlight(0)
-
     # Override config with command line arguments
     if args.server_url:
         config.server_url = args.server_url
@@ -161,6 +159,14 @@ def main():
     # Setup logging
     setup_logging(config.log_level)
     logger = logging.getLogger(__name__)
+
+    # Reading the status does not touch the sensor hardware, so leave the
+    # display alone in that case.
+    if not args.status:
+        try:
+            disable_display()
+        except Exception as e:
+            logger.warning(f"Could not turn off the display backlight: {e}")
 
     if config.dry_run:
         logger.info(f"Starting Weather Client in DRY-RUN mode (Station: {config.station_id})")
