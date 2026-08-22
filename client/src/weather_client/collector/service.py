@@ -109,6 +109,16 @@ class WeatherCollector:
         """Continuously collect weather readings from the sensor."""
         logger.info(f"Starting sensor reading loop (interval: {self.config.sensor_read_interval}s)")
 
+        # The BME280 reports its register contents before the first conversion
+        # finishes, which always fails validation and logs a misleading warning.
+        # Prime the sensor and discard that first result.
+        try:
+            self.sensor.update(10)
+            await asyncio.sleep(1)
+            logger.debug("Discarded the first sensor reading while the BME280 settles")
+        except Exception as e:
+            logger.warning(f"Could not prime the sensor: {e}")
+
         while self.running:
             try:
                 # Update sensor readings
@@ -171,30 +181,50 @@ class WeatherCollector:
 
         while self.running:
             try:
-                pending = self.buffer.get_pending_readings()
-
-                if pending:
-                    logger.info(f"Attempting to upload {len(pending)} readings")
-
-                    batch = WeatherBatch(
-                        readings=[item.reading for item in pending],
-                        station_id=self.config.station_id
-                    )
-
-                    success = await self.uploader.upload_batch(batch)
-                    if success:
-                        self.buffer.mark_uploaded([item.row_id for item in pending])
-                        self.last_upload = datetime.now(timezone.utc)
-                        logger.info(f"Successfully uploaded {len(pending)} readings")
-                    else:
-                        logger.warning("Failed to upload readings, will retry later")
-                else:
-                    logger.debug("No pending readings to upload")
-
+                await self._drain_buffer()
             except Exception as e:
                 logger.error(f"Error in upload loop: {e}")
 
             await asyncio.sleep(self.config.upload_interval)
+
+    async def _drain_buffer(self):
+        """Upload the buffer in chunks until it empties or a chunk fails.
+
+        A single request must stay well inside the HTTP timeout. After a long
+        outage the buffer holds thousands of readings, and sending them all at
+        once produces a request that cannot finish, which the collector would
+        then retry for ever.
+        """
+        uploaded_total = 0
+
+        while self.running:
+            pending = self.buffer.get_pending_readings(limit=self.config.upload_batch_size)
+
+            if not pending:
+                if uploaded_total:
+                    logger.info(f"Buffer drained, uploaded {uploaded_total} readings")
+                else:
+                    logger.debug("No pending readings to upload")
+                return
+
+            logger.info(f"Attempting to upload {len(pending)} readings")
+
+            batch = WeatherBatch(
+                readings=[item.reading for item in pending],
+                station_id=self.config.station_id
+            )
+
+            if not await self.uploader.upload_batch(batch):
+                logger.warning(
+                    "[Weather Client] Chunk upload failed, will retry later",
+                    extra={"uploaded_before_failure": uploaded_total},
+                )
+                return
+
+            self.buffer.mark_uploaded([item.row_id for item in pending])
+            self.last_upload = datetime.now(timezone.utc)
+            uploaded_total += len(pending)
+            logger.info(f"Successfully uploaded {len(pending)} readings")
 
     async def _upload_health(self):
         """Periodically report system health to the server."""

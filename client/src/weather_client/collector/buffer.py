@@ -156,23 +156,51 @@ class SQLiteBuffer:
             return 0
 
     def _cleanup_old_readings(self, conn: sqlite3.Connection):
-        """Remove old uploaded readings to maintain max size."""
+        """Trim the buffer back to max_size, preferring uploaded rows."""
         cursor = conn.execute("SELECT COUNT(*) FROM weather_readings")
         total_count = cursor.fetchone()[0]
 
-        if total_count > self.max_size:
-            excess = total_count - self.max_size
-            # SQLite is normally built without UPDATE/DELETE LIMIT support, so
-            # select the rows to drop with a subquery instead.
-            conn.execute("""
-                DELETE FROM weather_readings
-                WHERE id IN (
-                    SELECT id FROM weather_readings
-                    WHERE uploaded = TRUE
-                    ORDER BY created_at ASC
-                    LIMIT ?
-                )
-            """, (excess,))
+        if total_count <= self.max_size:
+            return
+
+        excess = total_count - self.max_size
+
+        # SQLite is normally built without UPDATE/DELETE LIMIT support, so
+        # select the rows to drop with a subquery instead.
+        uploaded_removed = conn.execute("""
+            DELETE FROM weather_readings
+            WHERE id IN (
+                SELECT id FROM weather_readings
+                WHERE uploaded = TRUE
+                ORDER BY created_at ASC
+                LIMIT ?
+            )
+        """, (excess,)).rowcount
+
+        still_excess = excess - uploaded_removed
+        if still_excess <= 0:
+            return
+
+        # Nothing left that has been uploaded, so the server has been
+        # unreachable for a long time. Drop the oldest readings anyway. Losing
+        # the oldest data beats filling the disk and losing the station.
+        pending_removed = conn.execute("""
+            DELETE FROM weather_readings
+            WHERE id IN (
+                SELECT id FROM weather_readings
+                ORDER BY created_at ASC
+                LIMIT ?
+            )
+        """, (still_excess,)).rowcount
+
+        if pending_removed:
+            logger.warning(
+                "[Weather Client] Buffer full of readings that never uploaded, dropped the oldest",
+                extra={
+                    "dropped_readings": pending_removed,
+                    "buffer_max_size": self.max_size,
+                },
+            )
 
     def clear_uploaded(self) -> int:
         """Clear all uploaded readings and return count removed."""

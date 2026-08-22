@@ -36,6 +36,7 @@ class Config:
 
     # Upload behavior
     upload_interval: int = 300  # 5 minutes
+    upload_batch_size: int = 500
     buffer_max_size: int = 1000
     retry_attempts: int = 5
     retry_base_delay: float = 1.0
@@ -68,6 +69,7 @@ class Config:
             server_url=os.getenv("SERVER_URL", "http://localhost:8080"),
             api_key=os.getenv("API_KEY", "your-api-key-here"),
             upload_interval=int(os.getenv("UPLOAD_INTERVAL", "300")),
+            upload_batch_size=int(os.getenv("UPLOAD_BATCH_SIZE", "500")),
             buffer_max_size=int(os.getenv("BUFFER_MAX_SIZE", "1000")),
             retry_attempts=int(os.getenv("RETRY_ATTEMPTS", "5")),
             retry_base_delay=float(os.getenv("RETRY_BASE_DELAY", "1.0")),
