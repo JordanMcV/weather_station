@@ -2,11 +2,12 @@
 
 import asyncio
 import gzip
+import json
 import logging
 import httpx
 
 from ..config import Config
-from ..models import WeatherBatch
+from ..models import SystemHealth, WeatherBatch
 
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,16 @@ class WeatherUploader:
             body,
             headers,
             description=f"batch {batch.batch_id}",
+        )
+
+    async def upload_health(self, health: SystemHealth) -> bool:
+        """Upload a system health snapshot."""
+        body, headers = self._encode(json.dumps(health.to_dict()), compress=False)
+        return await self._post(
+            "/api/v1/health/system",
+            body,
+            headers,
+            description="health snapshot",
         )
 
     def _encode(self, payload: str, compress: bool):

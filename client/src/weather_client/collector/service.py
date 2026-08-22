@@ -47,10 +47,11 @@ class WeatherCollector:
                 asyncio.create_task(self._collect_readings()),
             ]
         else:
-            # Normal mode: collect and upload
+            # Normal mode: collect, upload readings and report health
             self.tasks = [
                 asyncio.create_task(self._collect_readings()),
                 asyncio.create_task(self._upload_readings()),
+                asyncio.create_task(self._upload_health()),
             ]
 
         try:
@@ -79,6 +80,9 @@ class WeatherCollector:
                 await asyncio.gather(*self.tasks, return_exceptions=True)
             except Exception as e:
                 logger.debug(f"Task cancellation completed: {e}")
+
+        if self.uploader:
+            await self.uploader.close()
 
         logger.info("Weather collector stopped successfully")
 
@@ -172,6 +176,20 @@ class WeatherCollector:
                 logger.error(f"Error in upload loop: {e}")
 
             await asyncio.sleep(self.config.upload_interval)
+
+    async def _upload_health(self):
+        """Periodically report system health to the server."""
+        logger.info(f"Starting health report loop (interval: {self.config.health_upload_interval}s)")
+
+        while self.running:
+            try:
+                health = await asyncio.to_thread(self.get_status)
+                if not await self.uploader.upload_health(health):
+                    logger.warning("Failed to upload health snapshot, will retry later")
+            except Exception as e:
+                logger.error(f"Error in health report loop: {e}")
+
+            await asyncio.sleep(self.config.health_upload_interval)
 
     def get_status(self) -> SystemHealth:
         """Get current system health status."""
