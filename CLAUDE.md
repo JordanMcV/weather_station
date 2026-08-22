@@ -241,6 +241,7 @@ curl http://localhost:8080/api/v1/health
 - `API_KEY`: Authentication key
 - `STATION_ID`: Station identifier
 - `UPLOAD_INTERVAL`: Seconds between uploads
+- `UPLOAD_BATCH_SIZE`: Readings per request when draining a backlog
 - `SENSOR_READ_INTERVAL`: Sensor polling interval
 - `DATABASE_PATH`: SQLite buffer path
 - `TEMPERATURE_OFFSET`: Sensor calibration
@@ -257,6 +258,8 @@ curl http://localhost:8080/api/v1/health
 - `INFLUXDB_BUCKET`: InfluxDB bucket name
 - `API_KEY`: Client authentication key
 - `CORS_ALLOW_ORIGINS`: Comma separated browser origins. Empty keeps CORS off.
+- `MAX_TIMESTAMP_FUTURE_SECONDS`: Reject readings stamped further ahead than this
+- `MAX_TIMESTAMP_AGE_DAYS`: Reject readings older than this
 
 ### Grafana Dashboards
 - Real-time weather conditions
