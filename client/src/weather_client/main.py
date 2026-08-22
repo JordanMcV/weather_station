@@ -9,7 +9,7 @@ from argparse import ArgumentParser
 from PIL import Image, ImageDraw
 from st7789 import ST7789
 
-from .config import Config
+from .config import ALL_OPTIONAL_SENSORS, Config, parse_enabled_sensors
 from .collector.service import WeatherCollector
 
 
@@ -53,6 +53,10 @@ def create_parser() -> ArgumentParser:
         "--status",
         action="store_true",
         help="Show collector status and exit"
+    )
+    parser.add_argument(
+        "--enabled-sensors",
+        help=f"Comma separated optional sensors to read. Choose from: {', '.join(sorted(ALL_OPTIONAL_SENSORS))}. Pass an empty value to disable all."
     )
     parser.add_argument(
         "--log-level",
@@ -149,6 +153,8 @@ def main():
         config.station_id = args.station_id
     if args.log_level:
         config.log_level = args.log_level
+    if args.enabled_sensors is not None:
+        config.enabled_sensors = parse_enabled_sensors(args.enabled_sensors)
     if args.dry_run:
         config.dry_run = True
 

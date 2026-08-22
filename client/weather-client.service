@@ -14,8 +14,10 @@ Environment="SERVER_URL=http://pi4:8080"
 Environment="API_KEY=your-api-key-here"
 Environment="STATION_ID=piw"
 Environment="UPLOAD_INTERVAL=300"
+Environment="HEALTH_UPLOAD_INTERVAL=300"
 Environment="DATABASE_PATH=/data/weather.db"
 Environment="TEMPERATURE_OFFSET=-6.0"
+Environment="ENABLED_SENSORS=wind"
 Environment="LOG_LEVEL=INFO"
 RestartSec=10
 

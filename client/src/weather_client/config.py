@@ -1,7 +1,31 @@
 """Configuration for weather client."""
 
+import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import FrozenSet
+
+
+logger = logging.getLogger(__name__)
+
+# Optional sensors that can be switched on and off. Temperature, humidity and
+# pressure come from the BME280 and are always read.
+ALL_OPTIONAL_SENSORS = frozenset({"wind", "rain"})
+
+# The rain gauge does not register water, so it stays off until it is repaired.
+DEFAULT_OPTIONAL_SENSORS = frozenset({"wind"})
+
+
+def parse_enabled_sensors(raw: str) -> FrozenSet[str]:
+    """Parse a comma separated sensor list and drop unknown names."""
+    requested = {name.strip().lower() for name in raw.split(",") if name.strip()}
+    unknown = requested - ALL_OPTIONAL_SENSORS
+    if unknown:
+        logger.warning(
+            "[Weather Client] Ignoring unknown sensor names",
+            extra={"unknown_sensors": sorted(unknown), "known_sensors": sorted(ALL_OPTIONAL_SENSORS)},
+        )
+    return frozenset(requested & ALL_OPTIONAL_SENSORS)
 
 
 @dataclass
@@ -23,6 +47,10 @@ class Config:
     # Sensor settings
     sensor_read_interval: float = 15.0
     temperature_offset: float = -6.0
+    enabled_sensors: FrozenSet[str] = field(default_factory=lambda: DEFAULT_OPTIONAL_SENSORS)
+
+    # Health reporting
+    health_upload_interval: int = 300
 
     # Station identity
     station_id: str = "piw"
@@ -46,7 +74,12 @@ class Config:
             retry_max_delay=float(os.getenv("RETRY_MAX_DELAY", "60.0")),
             database_path=os.getenv("DATABASE_PATH", "/tmp/weather.db"),
             sensor_read_interval=float(os.getenv("SENSOR_READ_INTERVAL", "15.0")),
-            temperature_offset=float(os.getenv("TEMPERATURE_OFFSET", "-0.5")),
+            temperature_offset=float(os.getenv("TEMPERATURE_OFFSET", "-6.0")),
+            enabled_sensors=parse_enabled_sensors(
+                os.getenv("ENABLED_SENSORS", ",".join(sorted(DEFAULT_OPTIONAL_SENSORS)))
+            ),
+            health_upload_interval=int(os.getenv("HEALTH_UPLOAD_INTERVAL", "300")),
             station_id=os.getenv("STATION_ID", "piw"),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
+            dry_run=os.getenv("DRY_RUN", "false").strip().lower() in ("1", "true", "yes"),
         )

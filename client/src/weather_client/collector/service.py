@@ -38,6 +38,8 @@ class WeatherCollector:
         logger.info("Starting weather collector...")
         self.running = True
 
+        logger.info(f"Optional sensors enabled: {sorted(self.config.enabled_sensors) or 'none'}")
+
         # Start background tasks
         if self.config.dry_run:
             # In dry-run mode, only collect readings (no upload task)
@@ -95,9 +97,7 @@ class WeatherCollector:
                     temperature=self.sensor.temperature,
                     humidity=self.sensor.humidity,
                     pressure=self.sensor.pressure,
-                    wind_speed=self.sensor.wind_speed if self.sensor.updated_wind_rain else None,
-                    wind_direction=self.sensor.wind_direction if self.sensor.updated_wind_rain else None,
-                    rain_total=self.sensor.rain_total if self.sensor.updated_wind_rain else None,
+                    **self._read_optional_sensors(),
                 )
 
                 # Validate reading
@@ -125,6 +125,22 @@ class WeatherCollector:
                 logger.error(f"Error collecting reading: {e}")
 
             await asyncio.sleep(self.config.sensor_read_interval)
+
+    def _read_optional_sensors(self) -> dict:
+        """Read the optional sensors that are enabled in configuration."""
+        values = {}
+
+        # The wind and rain counters only refresh on their own slower cycle.
+        if not self.sensor.updated_wind_rain:
+            return values
+
+        if "wind" in self.config.enabled_sensors:
+            values["wind_speed"] = self.sensor.wind_speed
+            values["wind_direction"] = self.sensor.wind_direction
+        if "rain" in self.config.enabled_sensors:
+            values["rain_total"] = self.sensor.rain_total
+
+        return values
 
     async def _upload_readings(self):
         """Periodically upload buffered readings to the server."""
