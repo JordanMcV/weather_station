@@ -133,22 +133,35 @@ Pi W (Collector)                    pi4 (Server)
 ## Reliability Features
 
 ### Network Resilience
-- Local SQLite buffering on Pi W
+- Local SQLite buffering on Pi W, trimmed to `BUFFER_MAX_SIZE`
 - Automatic retry with exponential backoff
+- Uploads split into chunks of `UPLOAD_BATCH_SIZE`, so a long backlog still fits
+  inside the HTTP timeout
 - Graceful degradation during outages
-- Data deduplication on server side
 
 ### Data Integrity
-- Sensor range validation (implemented, see `WeatherReading.validate`)
-- Timestamp validation (partial, ranges are not checked)
-- Checksum validation (not implemented)
-- Duplicate detection (not implemented)
+- Sensor range validation, see `WeatherReading.validate`
+- Timestamp validation against `MAX_TIMESTAMP_FUTURE_SECONDS` and
+  `MAX_TIMESTAMP_AGE_DAYS`
+- A reading that fails either check is dropped and counted. The request still
+  succeeds, because refusing the batch would keep it buffered for ever.
+
+Deduplication needs no code. InfluxDB overwrites a point that repeats the same
+measurement, tag set, field key and timestamp. The collector stores the
+timestamp with the reading and never regenerates it, so a batch that uploads
+twice cannot create duplicates. Preserve that property: do not stamp readings at
+upload time.
+
+Checksums need no code either. Compressed batches carry a CRC32 inside the gzip
+container, and the server rejects a body that fails to decompress into valid
+JSON. Add a second checksum only if corrupt bodies start appearing in the log.
 
 ### Monitoring
-- Health check endpoints (implemented)
-- Client health reporting to `/api/v1/health/system` (implemented)
-- Disk space and network status in the health payload (implemented)
-- Data freshness alerts (not implemented)
+- Health check endpoints
+- Client health reporting to `/api/v1/health/system`
+- Disk space and network status in the health payload
+- Data freshness is visible on both Grafana dashboards. Alerting that sends a
+  notification is not set up yet.
 
 ## Monorepo Structure
 
@@ -262,10 +275,20 @@ curl http://localhost:8080/api/v1/health
 - `MAX_TIMESTAMP_AGE_DAYS`: Reject readings older than this
 
 ### Grafana Dashboards
-- Real-time weather conditions
-- Historical trends (daily/weekly/monthly)
-- System health monitoring
-- Data quality metrics
+
+Provisioned from `server/grafana/provisioning`. Change a dashboard in the
+repository, not in the Grafana user interface, because the provider overwrites
+interface edits.
+
+- **Weather Conditions**: current values, plus temperature, humidity, pressure
+  and wind history.
+- **Station Health**: buffer depth, CPU, memory, disk and chip temperature from
+  the `system_health` measurement.
+
+Both dashboards show an outage as a visible break in the line rather than a
+straight line across it. Every query uses `aggregateWindow` with
+`createEmpty: true`, and every graph sets `spanNulls: false`. The age panels turn
+amber after 15 minutes without data and red after 30.
 
 ## Future Enhancements
 - MQTT support for real-time streaming
