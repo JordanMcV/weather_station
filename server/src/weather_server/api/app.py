@@ -177,13 +177,16 @@ def create_app(config: Config) -> FastAPI:
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
 
-        except ValueError as e:
+        except HTTPException:
+            # Already a deliberate status code, so do not mask it as a 500.
+            raise
+        except (ValueError, KeyError, TypeError) as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid data format: {str(e)}"
             )
-        except Exception as e:
-            logger.error(f"Error ingesting batch: {e}")
+        except Exception:
+            logger.error("[Weather API] Error ingesting weather batch", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Internal server error"
@@ -225,13 +228,16 @@ def create_app(config: Config) -> FastAPI:
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
 
-        except ValueError as e:
+        except HTTPException:
+            # Already a deliberate status code, so do not mask it as a 500.
+            raise
+        except (ValueError, KeyError, TypeError) as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid data format: {str(e)}"
             )
-        except Exception as e:
-            logger.error(f"Error ingesting health data: {e}")
+        except Exception:
+            logger.error("[Weather API] Error ingesting health data", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Internal server error"
