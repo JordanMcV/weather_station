@@ -26,6 +26,10 @@ class GzipRequestMiddleware:
 
     The collector compresses larger batches to save bandwidth on a slow link.
     Starlette does not decompress request bodies, so do it here.
+
+    A body that is not valid gzip passes through unchanged. Collectors before
+    version 0.2 set the header without compressing the body, so rejecting it
+    would refuse every batch from a station that has not been updated yet.
     """
 
     def __init__(self, app: ASGIApp):
@@ -50,16 +54,15 @@ class GzipRequestMiddleware:
             body.extend(message.get("body", b""))
             more_body = message.get("more_body", False)
 
+        raw = bytes(body)
         try:
-            payload = gzip.decompress(bytes(body))
+            payload = gzip.decompress(raw)
         except (OSError, EOFError, zlib.error):
-            logger.warning("[Weather API] Rejected a malformed gzip request body")
-            response = JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content={"detail": "Malformed gzip request body"},
+            payload = raw
+            logger.warning(
+                "[Weather API] Request claimed gzip but the body is not gzip, so reading it as plain text",
+                extra={"content_length": len(raw), "path": scope.get("path")},
             )
-            await response(scope, receive, send)
-            return
 
         headers = [
             (name, value)
