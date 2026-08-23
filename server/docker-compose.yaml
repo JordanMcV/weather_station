@@ -35,7 +35,9 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-defaultpassword}
-      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+      # grafana-simple-json-datasource is an Angular plugin, which Grafana 11
+      # refuses to load. Installing it only slowed startup and logged errors.
+      - GF_INSTALL_PLUGINS=grafana-clock-panel
       # Grafana substitutes these into the provisioned datasource.
       - INFLUXDB_ORG=weather
       - INFLUXDB_BUCKET=weather_data
