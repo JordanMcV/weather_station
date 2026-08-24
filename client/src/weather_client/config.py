@@ -47,7 +47,13 @@ class Config:
 
     # Sensor settings
     sensor_read_interval: float = 15.0
-    temperature_offset: float = -6.0
+
+    # The library subtracts this from the BME280 reading to compensate for the
+    # Pi heating the board. This station separates the two with a ribbon cable
+    # and sits in an aspirated screen, so there is no self-heating to remove.
+    # Measured against a reference thermometer, the raw reading needs no
+    # correction. Re-measure before changing this.
+    temperature_offset: float = 0.0
     enabled_sensors: FrozenSet[str] = field(default_factory=lambda: DEFAULT_OPTIONAL_SENSORS)
 
     # Health reporting
@@ -76,7 +82,7 @@ class Config:
             retry_max_delay=float(os.getenv("RETRY_MAX_DELAY", "60.0")),
             database_path=os.getenv("DATABASE_PATH", "/tmp/weather.db"),
             sensor_read_interval=float(os.getenv("SENSOR_READ_INTERVAL", "15.0")),
-            temperature_offset=float(os.getenv("TEMPERATURE_OFFSET", "-6.0")),
+            temperature_offset=float(os.getenv("TEMPERATURE_OFFSET", "0.0")),
             enabled_sensors=parse_enabled_sensors(
                 os.getenv("ENABLED_SENSORS", ",".join(sorted(DEFAULT_OPTIONAL_SENSORS)))
             ),
