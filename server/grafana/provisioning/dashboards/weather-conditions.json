@@ -217,7 +217,7 @@
         },
         {
           "refId": "B",
-          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"weather\" and r._field == \"temperature\")\n  |> aggregateWindow(every: 1m, fn: mean, createEmpty: true)\n  |> timedMovingAverage(every: 1m, period: 5m)\n  |> keep(columns: [\"_time\", \"_value\", \"station_id\"])"
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"weather\" and r._field == \"temperature\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)\n  |> timedMovingAverage(every: v.windowPeriod, period: 5m)\n  |> keep(columns: [\"_time\", \"_value\", \"station_id\"])"
         }
       ],
       "fieldConfig": {
