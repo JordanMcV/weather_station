@@ -9,6 +9,7 @@ import psutil
 from ..config import Config
 from ..models import WeatherReading, WeatherBatch, SystemHealth
 from .buffer import SQLiteBuffer
+from .clock import boot_id, clock_is_synced, monotonic_ns
 from .uploader import WeatherUploader
 
 
@@ -32,6 +33,7 @@ class WeatherCollector:
         self.running = False
         self.last_upload = None
         self.tasks = []
+        self.boot_id = boot_id()
 
     async def start(self):
         """Start the weather collection service."""
@@ -146,8 +148,15 @@ class WeatherCollector:
                             + (f", Rain={reading.rain_total:.1f}mm" if reading.rain_total else "")
                         )
                     else:
-                        # Normal mode: store in buffer
-                        if self.buffer.add_reading(reading):
+                        # Normal mode: store in buffer. A reading taken before
+                        # NTP set the clock keeps its monotonic time, which is
+                        # what recovers its true timestamp later.
+                        if self.buffer.add_reading(
+                            reading,
+                            boot_id=self.boot_id,
+                            monotonic_ns=monotonic_ns(),
+                            time_provisional=not clock_is_synced(),
+                        ):
                             logger.debug(f"Added reading: T={reading.temperature:.1f}°C, H={reading.humidity:.1f}%, P={reading.pressure:.1f}hPa")
                         else:
                             logger.error("Failed to add reading to buffer")
@@ -181,11 +190,36 @@ class WeatherCollector:
 
         while self.running:
             try:
+                self._correct_provisional_readings()
                 await self._drain_buffer()
             except Exception as e:
                 logger.error(f"Error in upload loop: {e}")
 
             await asyncio.sleep(self.config.upload_interval)
+
+    def _correct_provisional_readings(self):
+        """Repair timestamps recorded before NTP set the clock.
+
+        Nothing happens until the clock is trustworthy, so a reading with a
+        wrong timestamp is never uploaded.
+        """
+        if not clock_is_synced():
+            waiting = self.buffer.count_provisional()
+            if waiting:
+                logger.warning(
+                    "[Weather Client] Holding readings back, the clock is not set yet",
+                    extra={"readings": waiting},
+                )
+            return
+
+        if not self.buffer.count_provisional():
+            return
+
+        self.buffer.correct_provisional(
+            current_boot_id=self.boot_id,
+            now_wall=datetime.now(timezone.utc),
+            now_monotonic_ns=monotonic_ns(),
+        )
 
     async def _drain_buffer(self):
         """Upload the buffer in chunks until it empties or a chunk fails.

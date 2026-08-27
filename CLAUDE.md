@@ -152,6 +152,17 @@ timestamp with the reading and never regenerates it, so a batch that uploads
 twice cannot create duplicates. Preserve that property: do not stamp readings at
 upload time.
 
+piw has no battery backed clock, so after a power cut it runs on a restored
+clock until NTP corrects it. A reading taken in that window is stored as
+provisional, with the `CLOCK_BOOTTIME` value that produced it, and it stays out
+of uploads. Once the clock is set, `correct_provisional` recovers the true
+timestamp from the monotonic interval. Readings from an earlier boot have no
+monotonic reference, so they inherit the offset measured on this boot, but only
+when their timestamps run contiguously into it.
+
+That rewrite happens before the reading is ever uploaded, so the deduplication
+property above still holds. A timestamp never changes once it has been sent.
+
 Checksums need no code either. Compressed batches carry a CRC32 inside the gzip
 container, and the server rejects a body that fails to decompress into valid
 JSON. Add a second checksum only if corrupt bodies start appearing in the log.
