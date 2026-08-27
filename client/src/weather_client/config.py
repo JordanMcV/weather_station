@@ -37,13 +37,13 @@ class Config:
     # Upload behavior
     upload_interval: int = 300  # 5 minutes
     upload_batch_size: int = 500
-    buffer_max_size: int = 1000
+    buffer_max_size: int = 17280  # 72 hours at a 15 second read interval
     retry_attempts: int = 5
     retry_base_delay: float = 1.0
     retry_max_delay: float = 60.0
 
     # Local storage
-    database_path: str = "/tmp/weather.db"
+    database_path: str = "/var/lib/weather-client/weather.db"
 
     # Sensor settings
     sensor_read_interval: float = 15.0
@@ -76,11 +76,11 @@ class Config:
             api_key=os.getenv("API_KEY", "your-api-key-here"),
             upload_interval=int(os.getenv("UPLOAD_INTERVAL", "300")),
             upload_batch_size=int(os.getenv("UPLOAD_BATCH_SIZE", "500")),
-            buffer_max_size=int(os.getenv("BUFFER_MAX_SIZE", "1000")),
+            buffer_max_size=int(os.getenv("BUFFER_MAX_SIZE", "17280")),
             retry_attempts=int(os.getenv("RETRY_ATTEMPTS", "5")),
             retry_base_delay=float(os.getenv("RETRY_BASE_DELAY", "1.0")),
             retry_max_delay=float(os.getenv("RETRY_MAX_DELAY", "60.0")),
-            database_path=os.getenv("DATABASE_PATH", "/tmp/weather.db"),
+            database_path=os.getenv("DATABASE_PATH", "/var/lib/weather-client/weather.db"),
             sensor_read_interval=float(os.getenv("SENSOR_READ_INTERVAL", "15.0")),
             temperature_offset=float(os.getenv("TEMPERATURE_OFFSET", "0.0")),
             enabled_sensors=parse_enabled_sensors(

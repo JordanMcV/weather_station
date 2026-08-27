@@ -119,9 +119,9 @@ Pi W (Collector)                    pi4 (Server)
 - **Package Manager**: uv (ultra-fast Python package installer)
 - **Service Management**: systemd for auto-start on boot
 - **Upload Interval**: 5 minutes
-- **Buffer Size**: 1000 readings max
+- **Buffer Size**: 17280 readings, which is 72 hours at the 15 second read interval
 - **Retry Attempts**: 5 with exponential backoff
-- **Local Storage**: SQLite in `/data/weather.db`
+- **Local Storage**: SQLite in `/var/lib/weather-client/weather.db`. The path must persist across a reboot, so do not put it in `/tmp`.
 - **Resource Optimization**: Minimal dependencies, no containerization overhead
 
 ### pi4 (Server) - Docker Compose
