@@ -1,130 +1,131 @@
-# Weather Station Monorepo
+# Weather Station
 
-Dual Raspberry Pi weather monitoring system with separated client and server codebases.
+A two-part weather monitoring system. A Raspberry Pi Zero reads a Pimoroni
+WeatherHAT and uploads readings over HTTP. A server stores them in InfluxDB and
+draws them in Grafana.
 
-## 🏗️ Architecture
+## Architecture
 
-This is a **monorepo** with two fully independent packages:
+The repository holds two independent packages:
 
-- **`client/`** - Lightweight Pi Zero W collector (WeatherHAT sensor), on bare metal
-- **`server/`** - API + InfluxDB + Grafana on pi4, in Docker Compose
+- `client/` reads the sensor and runs on a Raspberry Pi Zero, on bare metal.
+- `server/` receives the readings and runs anywhere that runs Docker.
 
-### Why Monorepo?
+The packages share no code. The HTTP API is the only interface between them, and
+the data models are duplicated on purpose so that neither side constrains the
+other.
 
-- ✅ **Complete separation** - No shared code or dependencies
-- ✅ **Optimized builds** - Client is minimal (no FastAPI/InfluxDB), Server has no WeatherHAT
-- ✅ **Independent deployment** - The client runs on bare metal, the server runs in Docker
-- ✅ **Clear boundaries** - Models are intentionally duplicated to prevent coupling
+The client needs a Raspberry Pi Zero because the WeatherHAT is a Pi HAT and the
+library talks to it over I2C and SPI. The server has no such constraint. It runs
+on another Raspberry Pi, a NAS, a virtual machine or a laptop.
 
-## 📦 Packages
+## Data flow
 
-### Client (Pi Zero W)
+```
+Raspberry Pi Zero                Server
+┌──────────────┐                ┌──────────────┐
+│ WeatherHAT   │                │ FastAPI      │
+│ sensor       │                │ REST API     │
+└──────┬───────┘                └──────┬───────┘
+       │                               │
+       ▼                               ▼
+┌──────────────┐    HTTP POST   ┌──────────────┐
+│ SQLite       │ ──────────────▶│ InfluxDB     │
+│ buffer       │                │ time series  │
+└──────────────┘                └──────┬───────┘
+                                       │
+                                       ▼
+                                ┌──────────────┐
+                                │ Grafana      │
+                                │ dashboards   │
+                                └──────────────┘
+```
+
+The client writes every reading to a local SQLite buffer first, then uploads in
+batches. The buffer holds 72 hours of readings, so a network outage costs
+nothing as long as it ends within three days.
+
+## Quick start
+
+### 1. Start the server
+
 ```bash
-cd client/
-# Install with uv (blazing fast!)
+cd server
+cp .env.example .env
+# Set API_KEY, INFLUXDB_TOKEN and the two passwords in .env.
+docker compose up -d
+curl http://localhost:8080/api/v1/health
+```
+
+### 2. Set up the client
+
+```bash
+cd client
+cp .env.example .env
+# Set SERVER_URL and the same API_KEY you gave the server.
 uv venv && source .venv/bin/activate
 uv pip install -e .
 uv run weather-client
 ```
 
-**Dependencies:** weatherhat, st7789, pillow, httpx, psutil
-**Package Manager:** [uv](https://github.com/astral-sh/uv) (extremely fast, perfect for Pi Zero)
-**Deployment:** Bare metal with a systemd unit. There is no client Dockerfile.
-**Purpose:** Collect sensor data, buffer locally, upload to server
-
-[📖 Client README](./client/README.md)
-
-### Server (pi4)
-```bash
-cd server/
-docker compose up -d
-```
-
-**Dependencies:** fastapi, uvicorn, influxdb-client
-**Package Manager:** [uv](https://github.com/astral-sh/uv)
-**Purpose:** Ingest data via REST API, store in InfluxDB, visualize with Grafana
-
-[📖 Server README](./server/README.md)
-
-## 🚀 Quick Start
-
-### 1. Set up Server (pi4)
+### 3. Install the client as a service
 
 ```bash
-cd server
-cp .env.example .env
-# Edit .env with your credentials
-
-# Start InfluxDB + Grafana + API
-docker compose up -d
-
-# Check health
-curl http://localhost:8080/api/v1/health
-```
-
-### 2. Set up Client (Pi Zero W)
-
-```bash
-cd client
-cp .env.example .env
-# Edit .env with server URL and API key
-
-# Run the collector directly
-uv run weather-client
-
-# Install as a service for production
 sudo cp weather-client.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now weather-client
 ```
 
-## 📊 Accessing Services
+## Services
 
-- **Weather API:** http://pi4:8080
-- **Grafana:** http://pi4:3000 (admin/password from .env)
-- **InfluxDB:** http://pi4:8086
+Replace `<server-host>` with the address of the machine running the server.
 
-## 🏛️ Project Structure
+| Service | Address |
+| --- | --- |
+| Weather API | `http://<server-host>:8080` |
+| Grafana | `http://<server-host>:3000` |
+| InfluxDB | `http://<server-host>:8086` |
+
+Sign in to Grafana with the credentials from `server/.env`.
+
+## Project structure
 
 ```
 weather_station/
-├── client/              # Pi Zero W collector, bare metal
+├── client/                    # Pi Zero collector, bare metal
 │   ├── src/weather_client/
-│   ├── pyproject.toml   # Minimal deps
+│   ├── pyproject.toml
 │   └── weather-client.service
 │
-├── server/              # pi4 server, Docker
+├── server/                    # API, InfluxDB and Grafana, in Docker
 │   ├── src/weather_server/
-│   ├── pyproject.toml   # Server deps
+│   ├── grafana/provisioning/
+│   ├── pyproject.toml
 │   ├── Dockerfile
 │   └── docker-compose.yaml
 │
-├── .env.example         # Root config template
-├── CLAUDE.md           # Architecture docs
-└── README.md           # This file
+├── .env.example
+└── CLAUDE.md                  # Architecture notes
 ```
 
-## 🔧 Development
+## Development
 
-### Client Development
+### Client
+
 ```bash
 cd client
 uv venv && source .venv/bin/activate
 uv pip install -e .
-uv run weather-client --status
 
-# Log readings without buffering or uploading
-uv run weather-client --dry-run
-
-# Choose which optional sensors to read
-uv run weather-client --enabled-sensors wind
+uv run weather-client --status      # Show buffer state
+uv run weather-client --dry-run     # Log readings without buffering or uploading
 ```
 
-Set `ENABLED_SENSORS` to pick the optional sensors. Choose from `wind` and
-`rain`. Temperature, humidity and pressure come from the BME280 and are always
-read. The rain gauge is disabled by default, because it does not register water.
+Temperature, humidity and pressure come from the BME280 and always read. Set
+`ENABLED_SENSORS` to add the optional sensors, choosing from `wind` and `rain`.
 
-### Server Development
+### Server
+
 ```bash
 cd server
 uv venv && source .venv/bin/activate
@@ -132,61 +133,21 @@ uv pip install -e .
 uv run weather-server --port 8080
 ```
 
-## 🐳 Deployment
+## Design decisions
 
-### Client (Pi Zero W)
+The client and server duplicate their data models rather than share them. The
+duplication keeps the client dependencies small, which matters on a Pi Zero, and
+it stops a change on one side from forcing a change on the other.
 
-The client runs on bare metal, because Docker wastes memory on a Pi Zero. It
-needs I2C and SPI access for the WeatherHAT. Deploy it with the systemd unit in
-`client/weather-client.service`.
+The client runs on bare metal rather than in Docker. A Pi Zero has little memory
+and the container runtime earns nothing here.
 
-### Server (pi4)
-```bash
-cd server
-docker compose up -d
-```
+The client stamps each reading when it reads the sensor and never restamps it at
+upload time. InfluxDB overwrites a point that repeats the same timestamp, so a
+batch that uploads twice cannot create duplicates.
 
-Starts the complete stack: InfluxDB, Grafana, Weather API.
+## Documentation
 
-## 📝 Configuration
-
-Each package has its own `.env.example` file:
-
-- `client/.env.example` - Client-specific settings
-- `server/.env.example` - Server-specific settings
-- `.env.example` - Root template showing all options
-
-## 🌐 Data Flow
-
-```
-Pi Zero W (Client)        →      pi4 (Server)
-┌──────────────┐                ┌──────────────┐
-│ WeatherHAT   │                │ FastAPI      │
-│ Sensor       │                │ REST API     │
-└──────┬───────┘                └──────┬───────┘
-       │                               │
-       ▼                               ▼
-┌──────────────┐                ┌──────────────┐
-│ SQLite       │    HTTP POST   │ InfluxDB     │
-│ Buffer       │ ──────────────▶│ Time Series  │
-└──────────────┘                └──────┬───────┘
-                                       │
-                                       ▼
-                                ┌──────────────┐
-                                │ Grafana      │
-                                │ Dashboards   │
-                                └──────────────┘
-```
-
-## 📚 Documentation
-
-- [CLAUDE.md](./CLAUDE.md) - Complete architecture documentation
-- [client/README.md](./client/README.md) - Client package details
-- [server/README.md](./server/README.md) - Server package details
-
-## 🎯 Design Philosophy
-
-1. **No shared code** - Models are duplicated intentionally
-2. **Separate dependencies** - Client stays lightweight, server full-featured
-3. **Independent deployment** - Each can be deployed/updated separately
-4. **Clear contracts** - HTTP REST API is the only interface
+- [client/README.md](./client/README.md) for the collector.
+- [server/README.md](./server/README.md) for the API and the stack.
+- [CLAUDE.md](./CLAUDE.md) for the full architecture notes.

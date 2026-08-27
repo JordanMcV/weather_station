@@ -5,20 +5,24 @@ Dual Raspberry Pi weather station system with weatherhat sensor hardware, Influx
 
 **MONOREPO STRUCTURE**: This project is organized as a monorepo with completely separated client and server codebases:
 - `client/` - Lightweight Pi Zero collector (minimal dependencies)
-- `server/` - Full-featured pi4 API server (InfluxDB, FastAPI, Grafana)
+- `server/` - Full-featured API server (InfluxDB, FastAPI, Grafana)
 
 ## Hardware Setup
-- **Pi W (piw)**: Weather station collector - underpowered, slow network, weatherhat hardware. LAN only, not on the tailnet.
-- **pi4**: Analytics server - InfluxDB + Grafana + FastAPI, in Docker Compose. Also runs Pi-hole, which holds ports 80 and 443.
+- **Collector**: a Raspberry Pi Zero with WeatherHAT hardware. The Pi Zero is a
+  requirement, because the WeatherHAT is a Pi HAT read over I2C and SPI. It is
+  underpowered and its wifi is often weak, since it sits outdoors.
+- **Server**: InfluxDB, Grafana and FastAPI in Docker Compose. It needs no
+  sensor hardware and runs on any machine that runs Docker.
 
-The server runs on pi4, not pi5. Older revisions of this document said pi5.
+The collector and the server may share a host with other services, so treat
+ports 80 and 443 as possibly taken.
 
 ## Recommended Architecture
 
-### Pi W (Collector Mode) - Lightweight Data Collection
+### Collector Mode - Lightweight Data Collection
 ```
 ┌─────────────────────────────────────┐
-│              Pi W (piw)             │
+│             Collector               │
 ├─────────────────────────────────────┤
 │ • WeatherHat sensor reading         │
 │ • Local SQLite buffering            │
@@ -35,10 +39,10 @@ The server runs on pi4, not pi5. Older revisions of this document said pi5.
 - **Retry Logic**: Exponential backoff for failed uploads
 - **Health Monitor**: System status, disk space, network connectivity
 
-### pi4 (Server Mode) - Analytics & Storage
+### Server Mode - Analytics & Storage
 ```
 ┌─────────────────────────────────────┐
-│              Pi 4                   │
+│              Server                 │
 ├─────────────────────────────────────┤
 │ • HTTP API server                   │
 │ • Data validation & processing      │
@@ -58,7 +62,7 @@ The server runs on pi4, not pi5. Older revisions of this document said pi5.
 ## Data Flow Architecture
 
 ```
-Pi W (Collector)                    pi4 (Server)
+Collector                           Server
 ┌─────────────┐                    ┌─────────────┐
 │ WeatherHat  │                    │             │
 │   Sensor    │                    │  HTTP API   │
@@ -107,14 +111,14 @@ Pi W (Collector)                    pi4 (Server)
       "rain_total": 0.0
     }
   ],
-  "station_id": "piw",
+  "station_id": "<station>",
   "batch_id": "uuid"
 }
 ```
 
 ## Deployment Configuration
 
-### Pi W (Collector) - Bare Metal
+### Collector - Bare Metal
 - **Deployment**: Direct on bare metal (no Docker - saves resources!)
 - **Package Manager**: uv (ultra-fast Python package installer)
 - **Service Management**: systemd for auto-start on boot
@@ -124,7 +128,7 @@ Pi W (Collector)                    pi4 (Server)
 - **Local Storage**: SQLite in `/var/lib/weather-client/weather.db`. The path must persist across a reboot, so do not put it in `/tmp`.
 - **Resource Optimization**: Minimal dependencies, no containerization overhead
 
-### pi4 (Server) - Docker Compose
+### Server - Docker Compose
 - **Deployment**: Docker Compose stack
 - **Components**: InfluxDB + Grafana + FastAPI server
 - **Data Retention**: 1 year raw data, 5 years aggregated
@@ -133,7 +137,7 @@ Pi W (Collector)                    pi4 (Server)
 ## Reliability Features
 
 ### Network Resilience
-- Local SQLite buffering on Pi W, trimmed to `BUFFER_MAX_SIZE`
+- Local SQLite buffering on the collector, trimmed to `BUFFER_MAX_SIZE`
 - Automatic retry with exponential backoff
 - Uploads split into chunks of `UPLOAD_BATCH_SIZE`, so a long backlog still fits
   inside the HTTP timeout
@@ -152,7 +156,7 @@ timestamp with the reading and never regenerates it, so a batch that uploads
 twice cannot create duplicates. Preserve that property: do not stamp readings at
 upload time.
 
-piw has no battery backed clock, so after a power cut it runs on a restored
+A Raspberry Pi has no battery backed clock, so after a power cut it runs on a restored
 clock until NTP corrects it. A reading taken in that window is stored as
 provisional, with the `CLOCK_BOOTTIME` value that produced it, and it stays out
 of uploads. Once the clock is set, `correct_provisional` recovers the true
@@ -189,7 +193,7 @@ weather_station/
 │   ├── .env.example          # Environment configuration
 │   └── README.md             # Bare metal installation guide
 │
-├── server/                    # pi4 server package (DOCKER)
+├── server/                    # Server package (DOCKER)
 │   ├── src/weather_server/
 │   │   ├── api/              # FastAPI routes & InfluxDB client
 │   │   ├── config.py         # Server-only configuration
@@ -208,7 +212,7 @@ weather_station/
 
 ## Development Commands
 
-### Client (Pi W) Setup - Bare Metal with uv
+### Client Setup - Bare Metal with uv
 ```bash
 cd client
 
@@ -222,7 +226,7 @@ source .venv/bin/activate
 uv pip install -e .
 
 # Run collector (development)
-uv run weather-client --server-url http://pi4:8080 --api-key your-key
+uv run weather-client --server-url http://<server-host>:8080 --api-key your-key
 
 # Check buffer status
 uv run weather-client --status
@@ -235,7 +239,7 @@ sudo systemctl start weather-client
 sudo systemctl status weather-client
 ```
 
-### Server (pi4) Setup
+### Server Setup
 ```bash
 cd server
 
@@ -261,7 +265,7 @@ curl http://localhost:8080/api/v1/health
 ## Configuration Files
 
 ### Client Environment Variables (client/.env)
-- `SERVER_URL`: pi4 API endpoint
+- `SERVER_URL`: API endpoint of the server
 - `API_KEY`: Authentication key
 - `STATION_ID`: Station identifier
 - `UPLOAD_INTERVAL`: Seconds between uploads

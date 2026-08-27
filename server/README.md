@@ -1,152 +1,141 @@
-# Weather Server (Pi 5)
+# Weather Server
 
-High-performance weather data ingestion API and analytics server for Raspberry Pi 5.
+Receives readings from one or more weather stations, stores them in InfluxDB and
+draws them in Grafana.
+
+The server has no sensor hardware and no Raspberry Pi dependency. It runs
+anywhere that runs Docker: another Raspberry Pi, a NAS, a virtual machine or a
+laptop.
 
 ## Features
 
-- 🚀 FastAPI REST API for data ingestion
-- 📊 InfluxDB time series storage
-- 📈 Grafana visualization (via docker-compose)
-- 🔐 API key authentication
-- ✅ Health monitoring
-- 📡 Multi-station support
+- FastAPI REST API for ingestion.
+- InfluxDB time series storage.
+- Provisioned Grafana dashboards.
+- API key authentication.
+- Health and freshness endpoints.
+- Accepts readings from several stations.
 
 ## Installation
 
-### Local Development
+### Docker, recommended
 
 ```bash
 cd server
+cp .env.example .env
+# Set API_KEY, INFLUXDB_TOKEN, INFLUXDB_ADMIN_PASSWORD and GRAFANA_ADMIN_PASSWORD.
+docker compose up -d
+```
 
-# Install uv (if not already installed)
+That starts InfluxDB on port 8086, Grafana on port 3000 and the API on port
+8080.
+
+Set every value in `.env` before you start the stack. The compose file falls
+back to placeholder credentials, which are fine for a first local run and unsafe
+for anything reachable.
+
+### Local development
+
+```bash
+cd server
 curl -LsSf https://astral.sh/uv/install.sh | sh
-export PATH="$HOME/.cargo/bin:$PATH"
+export PATH="$HOME/.local/bin:$PATH"
 
-# Create virtual environment and install dependencies
 uv venv
 source .venv/bin/activate
 uv pip install -e .
+uv run weather-server --port 8080
 ```
-
-### Docker Deployment (Recommended)
-
-```bash
-cd server
-docker-compose up -d
-```
-
-This starts:
-- InfluxDB on port 8086
-- Grafana on port 3000
-- Weather API on port 8080
 
 ## Configuration
-
-Create a `.env` file (see `.env.example`):
 
 ```bash
 SERVER_HOST=0.0.0.0
 SERVER_PORT=8080
 INFLUXDB_URL=http://localhost:8086
-INFLUXDB_TOKEN=your-influxdb-token
+INFLUXDB_TOKEN=<token>
 INFLUXDB_ORG=weather
 INFLUXDB_BUCKET=weather_data
-API_KEY=your-api-key-here
+API_KEY=<the key the client sends>
+CORS_ALLOW_ORIGINS=
+MAX_TIMESTAMP_FUTURE_SECONDS=3600
+MAX_TIMESTAMP_AGE_DAYS=30
 LOG_LEVEL=INFO
 ```
 
-## Usage
+`CORS_ALLOW_ORIGINS` is empty by default, which keeps CORS off. A collector
+talks server to server and does not need it. Set a comma separated origin list
+only if a browser client needs access.
 
-### Run directly
+The two timestamp limits bound what the server accepts. A collector without a
+real time clock can report a wrong time after a power cut, and these limits stop
+that data from reaching the database. A reading outside the window is dropped and
+counted, but the request still succeeds, because refusing the batch would keep it
+buffered on the client for ever.
 
-```bash
-uv run weather-server
-```
+## API
 
-### Run with custom settings
+All ingestion endpoints need `Authorization: Bearer <API_KEY>`.
 
-```bash
-uv run weather-server \
-  --host 0.0.0.0 \
-  --port 8080 \
-  --influxdb-url http://localhost:8086
-```
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/health` | API and InfluxDB status |
+| `POST` | `/api/v1/weather/batch` | Ingest a batch of readings |
+| `POST` | `/api/v1/health/system` | Ingest client health |
+| `GET` | `/api/v1/stations` | List reporting stations |
+| `GET` | `/api/v1/stats` | Counts for the last 24 hours |
 
-### Run as module
+Batch bodies of ten readings or more arrive gzipped. The server decompresses
+them in `GzipRequestMiddleware`.
 
-```bash
-uv run python -m weather_server
-```
-
-## API Endpoints
-
-### Health Check
-```bash
-GET /api/v1/health
-```
-
-### Ingest Weather Batch
-```bash
-POST /api/v1/weather/batch
-Authorization: Bearer your-api-key-here
-Content-Type: application/json
-
+```json
 {
-  "readings": [...],
-  "station_id": "piw",
-  "batch_id": "uuid"
+  "readings": [
+    {
+      "timestamp": "2025-09-20T10:00:00Z",
+      "temperature": 22.5,
+      "humidity": 65.2,
+      "pressure": 1013.25,
+      "wind_speed": 2.1,
+      "wind_direction": 180,
+      "rain_total": 0.0
+    }
+  ],
+  "station_id": "<station>",
+  "batch_id": "<uuid>"
 }
 ```
 
-### System Health
-```bash
-POST /api/v1/health/system
-Authorization: Bearer your-api-key-here
-```
+## Grafana
 
-### List Stations
-```bash
-GET /api/v1/stations
-```
+Docker Compose provisions the data source and both dashboards from
+`grafana/provisioning`. Change a dashboard in this repository rather than in the
+Grafana interface, because the provider overwrites interface edits on restart.
 
-### Get Statistics
-```bash
-GET /api/v1/stats
-```
+- **Weather Conditions**: current values, with temperature, humidity, pressure
+  and wind history.
+- **Station Health**: buffer depth, CPU, memory, disk and chip temperature.
+
+Both dashboards show an outage as a break in the line rather than a straight
+line across it. Every query uses `aggregateWindow` with `createEmpty: true`, and
+every graph sets `spanNulls: false`.
 
 ## Dependencies
 
-- **fastapi**: Modern web framework
-- **uvicorn**: ASGI server
-- **influxdb-client**: Time series database client
-
-No WeatherHAT dependency - server only!
+- `fastapi` for the API.
+- `uvicorn` for the server.
+- `influxdb-client` for storage.
 
 ## Architecture
 
 ```
-Server (Pi 5)
-├── FastAPI API Server
+Server
+├── FastAPI
 │   ├── Authentication
 │   ├── Validation
-│   └── Data Processing
+│   └── Gzip handling
 ├── InfluxDB
-│   ├── Time Series Storage
-│   └── Query Engine
+│   └── Time series storage
 └── Grafana
-    └── Dashboards
+    └── Provisioned dashboards
 ```
-
-## Grafana Setup
-
-1. Access Grafana at http://localhost:3000
-2. Login with credentials from `.env`
-3. Add InfluxDB data source
-4. Import weather dashboards
-
-## Monitoring
-
-Health check endpoint returns:
-- API status
-- InfluxDB connection status
-- 24h data statistics

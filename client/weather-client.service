@@ -7,15 +7,18 @@ StartLimitBurst=5
 
 [Service]
 Type=simple
-User=jordan
-Group=jordan
-WorkingDirectory=/home/jordan/projects/weather_station/client
+
+# Set these four to match your installation. The user needs membership of the
+# gpio, i2c and spi groups to read the WeatherHAT.
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/weather_station/client
 
 # Settings and secrets live outside the repository. Copy .env.example to
 # /etc/weather-client.env and set API_KEY there.
 EnvironmentFile=/etc/weather-client.env
 
-ExecStart=/home/jordan/projects/weather_station/client/.venv/bin/weather-client
+ExecStart=/home/pi/weather_station/client/.venv/bin/weather-client
 
 # Provides /var/lib/weather-client for the SQLite buffer.
 StateDirectory=weather-client
