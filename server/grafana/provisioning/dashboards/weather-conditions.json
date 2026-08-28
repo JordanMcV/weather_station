@@ -388,7 +388,7 @@
       "id": 8,
       "type": "timeseries",
       "title": "Wind speed",
-      "description": "Only present while the wind sensor is enabled. The rain gauge is disabled because it does not register water.",
+      "description": "Mean wind speed and gusts, following the usual meteorological convention. The mean is a ten minute average. The gust is the highest reading in each ten minute window. Individual 15 second readings are too spiky to read, and averaging alone would hide the gusts, so both are drawn. About 60 percent of readings are zero, because the anemometer needs a minimum wind to turn at all, so the mean sits low.",
       "gridPos": {
         "h": 8,
         "w": 24,
@@ -402,7 +402,11 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"weather\" and r._field == \"wind_speed\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)\n  |> keep(columns: [\"_time\", \"_value\", \"station_id\"])"
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"weather\" and r._field == \"wind_speed\")\n  |> aggregateWindow(every: 10m, fn: max, createEmpty: true)\n  |> keep(columns: [\"_time\", \"_value\", \"station_id\"])"
+        },
+        {
+          "refId": "B",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"weather\" and r._field == \"wind_speed\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)\n  |> timedMovingAverage(every: v.windowPeriod, period: 10m)\n  |> keep(columns: [\"_time\", \"_value\", \"station_id\"])"
         }
       ],
       "fieldConfig": {
@@ -420,7 +424,62 @@
             "insertNulls": 900000
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "gust (10 min peak)"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 14
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#C97A16"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "10 min mean"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3B82F6"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
