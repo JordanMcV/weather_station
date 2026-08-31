@@ -24,32 +24,6 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  grafana:
-    image: grafana/grafana:latest
-    container_name: weather-grafana
-    ports:
-      - "3000:3000"
-    volumes:
-      - grafana-storage:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-defaultpassword}
-      # grafana-simple-json-datasource is an Angular plugin, which Grafana 11
-      # refuses to load. Installing it only slowed startup and logged errors.
-      - GF_INSTALL_PLUGINS=grafana-clock-panel
-      # Grafana substitutes these into the provisioned datasource.
-      - INFLUXDB_ORG=weather
-      - INFLUXDB_BUCKET=weather_data
-      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN:-default-token}
-      # Set this to the tailnet URL so redirects and asset links work behind
-      # the Tailscale proxy. Pi-hole holds 443 on this host, hence 8443.
-      - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-http://localhost:3000/}
-    depends_on:
-      influxdb:
-        condition: service_healthy
-    restart: unless-stopped
-
   weather-api:
     build:
       context: .
@@ -79,4 +53,3 @@ services:
 
 volumes:
   influxdb-storage:
-  grafana-storage:
