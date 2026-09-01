@@ -14,7 +14,7 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from ..config import Config
-from ..models import WeatherBatch, SystemHealth
+from ..models import HealthBatch, WeatherBatch, SystemHealth
 from .influx_client import InfluxDBClient
 
 
@@ -256,26 +256,28 @@ def create_app(config: Config) -> FastAPI:
         health_data: dict,
         api_key: str = Depends(verify_api_key)
     ):
-        """Ingest system health metrics."""
-        try:
-            # Parse health data
-            health = SystemHealth(
-                timestamp=datetime.fromisoformat(health_data["timestamp"].replace("Z", "+00:00")),
-                station_id=health_data["station_id"],
-                cpu_percent=health_data["cpu_percent"],
-                memory_percent=health_data["memory_percent"],
-                disk_percent=health_data["disk_percent"],
-                temperature=health_data.get("temperature"),
-                network_connected=health_data.get("network_connected", True),
-                last_upload=datetime.fromisoformat(health_data["last_upload"].replace("Z", "+00:00")) if health_data.get("last_upload") else None,
-                buffer_size=health_data.get("buffer_size", 0),
-                wifi_signal_dbm=health_data.get("wifi_signal_dbm"),
-                wifi_tx_bitrate_mbps=health_data.get("wifi_tx_bitrate_mbps"),
-                wifi_tx_retries=health_data.get("wifi_tx_retries"),
-            )
+        """Ingest system health metrics.
 
-            # Store in InfluxDB
-            success = await influx_client.write_health(health)
+        Accepts a batch of snapshots under "snapshots", which is what a
+        buffering collector sends. A bare snapshot object still works, because
+        a collector before version 0.3 sends one snapshot per request.
+        """
+        try:
+            if "snapshots" in health_data:
+                batch = HealthBatch.from_dict(health_data)
+                if not batch.snapshots or not batch.station_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Batch must name a station and carry at least one snapshot"
+                    )
+                success = await influx_client.write_health_batch(batch)
+                station_id = batch.station_id
+                count = len(batch.snapshots)
+            else:
+                health = SystemHealth.from_dict(health_data)
+                success = await influx_client.write_health(health)
+                station_id = health.station_id
+                count = 1
 
             if not success:
                 raise HTTPException(
@@ -283,7 +285,7 @@ def create_app(config: Config) -> FastAPI:
                     detail="Failed to store health data"
                 )
 
-            logger.debug(f"Successfully ingested health data from {health.station_id}")
+            logger.debug(f"Successfully ingested {count} health snapshots from {station_id}")
 
             return {
                 "status": "success",

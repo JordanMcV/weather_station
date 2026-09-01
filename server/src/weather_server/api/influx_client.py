@@ -8,7 +8,7 @@ from influxdb_client import InfluxDBClient as InfluxClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 
 from ..config import Config
-from ..models import WeatherBatch, WeatherReading, SystemHealth
+from ..models import HealthBatch, WeatherBatch, WeatherReading, SystemHealth
 
 
 logger = logging.getLogger(__name__)
@@ -71,40 +71,56 @@ class InfluxDBClient:
             logger.error(f"Failed to write weather batch to InfluxDB: {e}")
             return False
 
+    def _health_point(self, health: SystemHealth) -> Point:
+        """Build one system_health point from a snapshot."""
+        point = Point("system_health") \
+            .tag("station_id", health.station_id) \
+            .field("cpu_percent", health.cpu_percent) \
+            .field("memory_percent", health.memory_percent) \
+            .field("disk_percent", health.disk_percent) \
+            .field("network_connected", health.network_connected) \
+            .field("buffer_size", health.buffer_size) \
+            .time(health.timestamp)
+
+        # Add optional fields
+        if health.temperature is not None:
+            point = point.field("cpu_temperature", health.temperature)
+        if health.last_upload is not None:
+            point = point.field("last_upload", health.last_upload.timestamp())
+        if health.wifi_signal_dbm is not None:
+            point = point.field("wifi_signal_dbm", float(health.wifi_signal_dbm))
+        if health.wifi_tx_bitrate_mbps is not None:
+            point = point.field("wifi_tx_bitrate_mbps", float(health.wifi_tx_bitrate_mbps))
+        if health.wifi_tx_retries is not None:
+            point = point.field("wifi_tx_retries", int(health.wifi_tx_retries))
+
+        return point
+
     async def write_health(self, health: SystemHealth) -> bool:
-        """Write system health metrics to InfluxDB."""
+        """Write one system health snapshot to InfluxDB."""
         try:
-            point = Point("system_health") \
-                .tag("station_id", health.station_id) \
-                .field("cpu_percent", health.cpu_percent) \
-                .field("memory_percent", health.memory_percent) \
-                .field("disk_percent", health.disk_percent) \
-                .field("network_connected", health.network_connected) \
-                .field("buffer_size", health.buffer_size) \
-                .time(health.timestamp)
-
-            # Add optional fields
-            if health.temperature is not None:
-                point = point.field("cpu_temperature", health.temperature)
-            if health.last_upload is not None:
-                point = point.field("last_upload", health.last_upload.timestamp())
-            if health.wifi_signal_dbm is not None:
-                point = point.field("wifi_signal_dbm", float(health.wifi_signal_dbm))
-            if health.wifi_tx_bitrate_mbps is not None:
-                point = point.field("wifi_tx_bitrate_mbps", float(health.wifi_tx_bitrate_mbps))
-            if health.wifi_tx_retries is not None:
-                point = point.field("wifi_tx_retries", int(health.wifi_tx_retries))
-
             self.write_api.write(
                 bucket=self.config.influxdb_bucket,
-                record=point
+                record=self._health_point(health),
             )
-
-            logger.debug(f"Successfully wrote health data to InfluxDB")
+            logger.debug("Successfully wrote health data to InfluxDB")
             return True
+        except Exception:
+            logger.error("[Weather API] Failed to write health data to InfluxDB", exc_info=True)
+            return False
 
-        except Exception as e:
-            logger.error(f"Failed to write health data to InfluxDB: {e}")
+    async def write_health_batch(self, batch: HealthBatch) -> bool:
+        """Write a batch of system health snapshots to InfluxDB."""
+        try:
+            points = [self._health_point(snapshot) for snapshot in batch.snapshots]
+            self.write_api.write(
+                bucket=self.config.influxdb_bucket,
+                record=points,
+            )
+            logger.debug(f"Successfully wrote {len(points)} health points to InfluxDB")
+            return True
+        except Exception:
+            logger.error("[Weather API] Failed to write health batch to InfluxDB", exc_info=True)
             return False
 
     async def get_stations(self) -> List[str]:

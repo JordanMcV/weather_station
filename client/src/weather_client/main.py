@@ -101,6 +101,7 @@ async def run_collector(config: Config, show_status: bool = False):
             print(f"CPU Temperature: {status.temperature:.1f}°C")
         print(f"Network: {'Connected' if status.network_connected else 'Disconnected'}")
         print(f"Buffer Size: {status.buffer_size} readings")
+        print(f"Health Buffer: {collector.buffer.get_health_buffer_size()} snapshots")
         if status.wifi_signal_dbm is not None:
             print(f"WiFi Signal: {status.wifi_signal_dbm:.0f} dBm")
         if status.wifi_tx_bitrate_mbps is not None:

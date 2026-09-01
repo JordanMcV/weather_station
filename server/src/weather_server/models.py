@@ -131,3 +131,58 @@ class SystemHealth:
             "wifi_tx_bitrate_mbps": self.wifi_tx_bitrate_mbps,
             "wifi_tx_retries": self.wifi_tx_retries,
         }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "SystemHealth":
+        last_upload = data.get("last_upload")
+        return cls(
+            timestamp=datetime.fromisoformat(data["timestamp"].replace("Z", "+00:00")),
+            station_id=data["station_id"],
+            cpu_percent=data["cpu_percent"],
+            memory_percent=data["memory_percent"],
+            disk_percent=data["disk_percent"],
+            temperature=data.get("temperature"),
+            network_connected=data.get("network_connected", True),
+            last_upload=datetime.fromisoformat(last_upload.replace("Z", "+00:00")) if last_upload else None,
+            buffer_size=data.get("buffer_size", 0),
+            wifi_signal_dbm=data.get("wifi_signal_dbm"),
+            wifi_tx_bitrate_mbps=data.get("wifi_tx_bitrate_mbps"),
+            wifi_tx_retries=data.get("wifi_tx_retries"),
+        )
+
+
+@dataclass
+class HealthBatch:
+    """A batch of health snapshots, shaped like WeatherBatch.
+
+    Health snapshots buffer and upload exactly as readings do, so a bad link
+    delays them instead of destroying them.
+    """
+
+    snapshots: List[SystemHealth]
+    station_id: str
+    batch_id: str
+
+    def __init__(self, snapshots: List[SystemHealth], station_id: str, batch_id: Optional[str] = None):
+        self.snapshots = snapshots
+        self.station_id = station_id
+        self.batch_id = batch_id or str(uuid.uuid4())
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "snapshots": [snapshot.to_dict() for snapshot in self.snapshots],
+            "station_id": self.station_id,
+            "batch_id": self.batch_id,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "HealthBatch":
+        return cls(
+            snapshots=[SystemHealth.from_dict(s) for s in data["snapshots"]],
+            station_id=data["station_id"],
+            batch_id=data.get("batch_id"),
+        )
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict())
+

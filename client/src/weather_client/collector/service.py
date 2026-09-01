@@ -9,7 +9,7 @@ import weatherhat
 import psutil
 
 from ..config import Config
-from ..models import WeatherReading, WeatherBatch, SystemHealth
+from ..models import WeatherReading, WeatherBatch, SystemHealth, HealthBatch
 from .buffer import SQLiteBuffer
 from .clock import boot_id, clock_is_synced, monotonic_ns
 from .uploader import WeatherUploader
@@ -271,12 +271,55 @@ class WeatherCollector:
         while self.running:
             try:
                 health = await asyncio.to_thread(self.get_status)
-                if not await self.uploader.upload_health(health):
-                    logger.warning("Failed to upload health snapshot, will retry later")
+                await asyncio.to_thread(self._buffer_health, health)
+                await self._drain_health_buffer()
             except Exception as e:
                 logger.error(f"Error in health report loop: {e}")
 
             await asyncio.sleep(self.config.health_upload_interval)
+
+    def _buffer_health(self, health: SystemHealth):
+        """Buffer a health snapshot, unless its timestamp cannot be trusted.
+
+        A snapshot has no monotonic reference to repair later, so one taken
+        before NTP sets the clock would sit on the graph at the wrong time for
+        ever. Dropping it costs a single point every 5 minutes during the boot
+        window, which is cheaper than a permanently wrong one.
+        """
+        if not clock_is_synced():
+            logger.warning("[Weather Client] Dropped a health snapshot, the clock is not set yet")
+            return
+        self.buffer.add_health(health)
+
+    async def _drain_health_buffer(self):
+        """Upload buffered health snapshots in chunks, as readings drain."""
+        uploaded_total = 0
+
+        while self.running:
+            pending = self.buffer.get_pending_health(limit=self.config.upload_batch_size)
+
+            if not pending:
+                if uploaded_total:
+                    logger.info(f"Health buffer drained, uploaded {uploaded_total} snapshots")
+                return
+
+            batch = HealthBatch(
+                snapshots=[item.snapshot for item in pending],
+                station_id=self.config.station_id,
+            )
+
+            if not await self.uploader.upload_health_batch(batch):
+                logger.warning(
+                    "[Weather Client] Health chunk upload failed, will retry later",
+                    extra={
+                        "uploaded_before_failure": uploaded_total,
+                        "health_buffer_size": self.buffer.get_health_buffer_size(),
+                    },
+                )
+                return
+
+            self.buffer.mark_health_uploaded([item.row_id for item in pending])
+            uploaded_total += len(pending)
 
     def get_status(self) -> SystemHealth:
         """Get current system health status."""

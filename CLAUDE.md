@@ -137,7 +137,10 @@ Collector                           Server
 ## Reliability Features
 
 ### Network Resilience
-- Local SQLite buffering on the collector, trimmed to `BUFFER_MAX_SIZE`
+- Local SQLite buffering on the collector, trimmed to `BUFFER_MAX_SIZE`. Weather
+  readings and health snapshots buffer the same way, in the same database file,
+  under the same limit. Both upload in chunks of `UPLOAD_BATCH_SIZE` and both
+  survive an outage.
 - Automatic retry with exponential backoff
 - Uploads split into chunks of `UPLOAD_BATCH_SIZE`, so a long backlog still fits
   inside the HTTP timeout
@@ -173,7 +176,12 @@ JSON. Add a second checksum only if corrupt bodies start appearing in the log.
 
 ### Monitoring
 - Health check endpoints
-- Client health reporting to `/api/v1/health/system`
+- Client health reporting to `/api/v1/health/system`. The endpoint takes a batch
+  under `snapshots`, and still takes a bare snapshot from an older collector.
+- Health snapshots buffer in the `system_health` table before upload, so a bad
+  link delays them instead of destroying them. A snapshot taken before NTP sets
+  the clock is dropped rather than buffered, because it has no monotonic
+  reference to repair later.
 - Disk space and network status in the health payload
 - WiFi signal, transmit bitrate and cumulative transmit retries in the
   health payload, read from `/proc/net/wireless` and `iw dev <iface> link`.

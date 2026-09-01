@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 from pathlib import Path
 
-from ..models import WeatherReading
+from ..models import SystemHealth, WeatherReading
 
 
 logger = logging.getLogger(__name__)
@@ -19,6 +19,14 @@ class BufferedReading:
 
     row_id: int
     reading: WeatherReading
+
+
+@dataclass
+class BufferedHealth:
+    """A health snapshot paired with its buffer row id."""
+
+    row_id: int
+    snapshot: SystemHealth
 
 
 class SQLiteBuffer:
@@ -54,6 +62,28 @@ class SQLiteBuffer:
             """)
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_uploaded ON weather_readings(uploaded)
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS system_health (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    station_id TEXT NOT NULL,
+                    cpu_percent REAL NOT NULL,
+                    memory_percent REAL NOT NULL,
+                    disk_percent REAL NOT NULL,
+                    cpu_temperature REAL,
+                    network_connected INTEGER NOT NULL DEFAULT 1,
+                    last_upload TEXT,
+                    reading_buffer_size INTEGER NOT NULL DEFAULT 0,
+                    wifi_signal_dbm REAL,
+                    wifi_tx_bitrate_mbps REAL,
+                    wifi_tx_retries INTEGER,
+                    created_at TEXT NOT NULL,
+                    uploaded BOOLEAN DEFAULT FALSE
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_health_uploaded ON system_health(uploaded)
             """)
             self._add_missing_columns(conn)
             conn.commit()
@@ -298,6 +328,113 @@ class SQLiteBuffer:
 
         return len(rows)
 
+    def add_health(self, health: SystemHealth) -> bool:
+        """Add a health snapshot to the buffer.
+
+        Snapshots buffer exactly as readings do. A snapshot stores the time it
+        was taken and never restamps it, so a late upload lands at the right
+        point on the graph and InfluxDB overwrites any repeat.
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("""
+                    INSERT INTO system_health
+                    (timestamp, station_id, cpu_percent, memory_percent, disk_percent, cpu_temperature,
+                     network_connected, last_upload, reading_buffer_size, wifi_signal_dbm,
+                     wifi_tx_bitrate_mbps, wifi_tx_retries, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    health.timestamp.isoformat(),
+                    health.station_id,
+                    health.cpu_percent,
+                    health.memory_percent,
+                    health.disk_percent,
+                    health.temperature,
+                    1 if health.network_connected else 0,
+                    health.last_upload.isoformat() if health.last_upload else None,
+                    health.buffer_size,
+                    health.wifi_signal_dbm,
+                    health.wifi_tx_bitrate_mbps,
+                    health.wifi_tx_retries,
+                    datetime.now(timezone.utc).isoformat(),
+                ))
+                conn.commit()
+
+                self._cleanup_old_health(conn)
+
+            return True
+        except sqlite3.Error:
+            logger.error("[Weather Client] Failed to add health snapshot to buffer", exc_info=True)
+            return False
+
+    def get_pending_health(self, limit: Optional[int] = None) -> List[BufferedHealth]:
+        """Get health snapshots that have not been uploaded, each with its row id."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                query = """
+                    SELECT id, timestamp, station_id, cpu_percent, memory_percent, disk_percent,
+                           cpu_temperature, network_connected, last_upload, reading_buffer_size,
+                           wifi_signal_dbm, wifi_tx_bitrate_mbps, wifi_tx_retries
+                    FROM system_health
+                    WHERE uploaded = FALSE
+                    ORDER BY timestamp ASC
+                """
+                params: List[int] = []
+                if limit:
+                    query += " LIMIT ?"
+                    params.append(limit)
+
+                buffered = []
+                for row in conn.execute(query, params).fetchall():
+                    snapshot = SystemHealth(
+                        timestamp=datetime.fromisoformat(row[1]),
+                        station_id=row[2],
+                        cpu_percent=row[3],
+                        memory_percent=row[4],
+                        disk_percent=row[5],
+                        temperature=row[6],
+                        network_connected=bool(row[7]),
+                        last_upload=datetime.fromisoformat(row[8]) if row[8] else None,
+                        buffer_size=row[9],
+                        wifi_signal_dbm=row[10],
+                        wifi_tx_bitrate_mbps=row[11],
+                        wifi_tx_retries=row[12],
+                    )
+                    buffered.append(BufferedHealth(row_id=row[0], snapshot=snapshot))
+
+                return buffered
+        except sqlite3.Error:
+            logger.error("[Weather Client] Failed to get pending health snapshots", exc_info=True)
+            return []
+
+    def mark_health_uploaded(self, row_ids: List[int]) -> bool:
+        """Mark health buffer rows as uploaded by primary key."""
+        if not row_ids:
+            return True
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                placeholders = ",".join("?" * len(row_ids))
+                conn.execute(f"""
+                    UPDATE system_health
+                    SET uploaded = TRUE
+                    WHERE id IN ({placeholders})
+                """, row_ids)
+                conn.commit()
+            return True
+        except sqlite3.Error:
+            logger.error("[Weather Client] Failed to mark health snapshots as uploaded", exc_info=True)
+            return False
+
+    def get_health_buffer_size(self) -> int:
+        """Get the number of health snapshots waiting to upload."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute("SELECT COUNT(*) FROM system_health WHERE uploaded = FALSE")
+                return cursor.fetchone()[0]
+        except sqlite3.Error:
+            logger.error("[Weather Client] Failed to get health buffer size", exc_info=True)
+            return 0
+
     def get_buffer_size(self) -> int:
         """Get the current number of readings in the buffer."""
         try:
@@ -319,8 +456,16 @@ class SQLiteBuffer:
             return 0
 
     def _cleanup_old_readings(self, conn: sqlite3.Connection):
-        """Trim the buffer back to max_size, preferring uploaded rows."""
-        cursor = conn.execute("SELECT COUNT(*) FROM weather_readings")
+        """Trim the readings buffer back to max_size, preferring uploaded rows."""
+        self._trim_table(conn, "weather_readings", "readings")
+
+    def _cleanup_old_health(self, conn: sqlite3.Connection):
+        """Trim the health buffer back to max_size, preferring uploaded rows."""
+        self._trim_table(conn, "system_health", "health snapshots")
+
+    def _trim_table(self, conn: sqlite3.Connection, table: str, label: str):
+        """Trim a buffer table back to max_size, preferring uploaded rows."""
+        cursor = conn.execute(f"SELECT COUNT(*) FROM {table}")
         total_count = cursor.fetchone()[0]
 
         if total_count <= self.max_size:
@@ -330,10 +475,10 @@ class SQLiteBuffer:
 
         # SQLite is normally built without UPDATE/DELETE LIMIT support, so
         # select the rows to drop with a subquery instead.
-        uploaded_removed = conn.execute("""
-            DELETE FROM weather_readings
+        uploaded_removed = conn.execute(f"""
+            DELETE FROM {table}
             WHERE id IN (
-                SELECT id FROM weather_readings
+                SELECT id FROM {table}
                 WHERE uploaded = TRUE
                 ORDER BY created_at ASC
                 LIMIT ?
@@ -345,12 +490,12 @@ class SQLiteBuffer:
             return
 
         # Nothing left that has been uploaded, so the server has been
-        # unreachable for a long time. Drop the oldest readings anyway. Losing
-        # the oldest data beats filling the disk and losing the station.
-        pending_removed = conn.execute("""
-            DELETE FROM weather_readings
+        # unreachable for a long time. Drop the oldest rows anyway. Losing the
+        # oldest data beats filling the disk and losing the station.
+        pending_removed = conn.execute(f"""
+            DELETE FROM {table}
             WHERE id IN (
-                SELECT id FROM weather_readings
+                SELECT id FROM {table}
                 ORDER BY created_at ASC
                 LIMIT ?
             )
@@ -358,9 +503,11 @@ class SQLiteBuffer:
 
         if pending_removed:
             logger.warning(
-                "[Weather Client] Buffer full of readings that never uploaded, dropped the oldest",
+                "[Weather Client] Buffer full of rows that never uploaded, dropped the oldest",
                 extra={
-                    "dropped_readings": pending_removed,
+                    "table": table,
+                    "label": label,
+                    "dropped_rows": pending_removed,
                     "buffer_max_size": self.max_size,
                 },
             )
