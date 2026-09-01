@@ -88,6 +88,12 @@ class InfluxDBClient:
                 point = point.field("cpu_temperature", health.temperature)
             if health.last_upload is not None:
                 point = point.field("last_upload", health.last_upload.timestamp())
+            if health.wifi_signal_dbm is not None:
+                point = point.field("wifi_signal_dbm", float(health.wifi_signal_dbm))
+            if health.wifi_tx_bitrate_mbps is not None:
+                point = point.field("wifi_tx_bitrate_mbps", float(health.wifi_tx_bitrate_mbps))
+            if health.wifi_tx_retries is not None:
+                point = point.field("wifi_tx_retries", int(health.wifi_tx_retries))
 
             self.write_api.write(
                 bucket=self.config.influxdb_bucket,

@@ -269,6 +269,9 @@ def create_app(config: Config) -> FastAPI:
                 network_connected=health_data.get("network_connected", True),
                 last_upload=datetime.fromisoformat(health_data["last_upload"].replace("Z", "+00:00")) if health_data.get("last_upload") else None,
                 buffer_size=health_data.get("buffer_size", 0),
+                wifi_signal_dbm=health_data.get("wifi_signal_dbm"),
+                wifi_tx_bitrate_mbps=health_data.get("wifi_tx_bitrate_mbps"),
+                wifi_tx_retries=health_data.get("wifi_tx_retries"),
             )
 
             # Store in InfluxDB

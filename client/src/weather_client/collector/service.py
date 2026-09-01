@@ -2,6 +2,8 @@
 
 import asyncio
 import logging
+import shutil
+import subprocess
 from datetime import datetime, timezone
 import weatherhat
 import psutil
@@ -14,6 +16,8 @@ from .uploader import WeatherUploader
 
 
 logger = logging.getLogger(__name__)
+
+IW_SEARCH_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 
 class WeatherCollector:
@@ -299,6 +303,8 @@ class WeatherCollector:
             # Get buffer size (0 in dry-run mode)
             buffer_size = 0 if self.config.dry_run else self.buffer.get_buffer_size()
 
+            wifi_signal, wifi_tx_bitrate, wifi_tx_retries = self._read_wifi_stats()
+
             return SystemHealth(
                 timestamp=datetime.now(timezone.utc),
                 station_id=self.config.station_id,
@@ -309,6 +315,9 @@ class WeatherCollector:
                 network_connected=network_connected,
                 last_upload=self.last_upload,
                 buffer_size=buffer_size,
+                wifi_signal_dbm=wifi_signal,
+                wifi_tx_bitrate_mbps=wifi_tx_bitrate,
+                wifi_tx_retries=wifi_tx_retries,
             )
         except Exception as e:
             logger.error(f"Error getting system status: {e}")
@@ -322,6 +331,51 @@ class WeatherCollector:
                 network_connected=False,
                 buffer_size=buffer_size,
             )
+
+    def _read_wifi_stats(self) -> tuple:
+        """Read the wireless signal level, retry count and transmit bitrate.
+
+        Returns (signal_dbm, tx_bitrate_mbps, tx_retries). Any value the host
+        cannot supply comes back as None.
+        """
+        interface = None
+        signal_dbm = None
+        tx_retries = None
+        try:
+            with open("/proc/net/wireless", "r") as f:
+                for line in f.readlines()[2:]:
+                    name, _, values = line.partition(":")
+                    fields = values.split()
+                    if len(fields) < 8:
+                        continue
+                    interface = name.strip()
+                    signal_dbm = float(fields[2].rstrip("."))
+                    tx_retries = int(float(fields[7].rstrip(".")))
+                    break
+        except (FileNotFoundError, ValueError, IndexError):
+            pass
+
+        # Resolve iw against the standard directories rather than the inherited
+        # PATH, which omits the sbin directories outside systemd.
+        iw = shutil.which("iw", path=IW_SEARCH_PATH) if interface else None
+
+        tx_bitrate_mbps = None
+        if iw:
+            try:
+                output = subprocess.run(
+                    [iw, "dev", interface, "link"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                ).stdout
+                for line in output.splitlines():
+                    if "tx bitrate:" in line:
+                        tx_bitrate_mbps = float(line.split(":")[1].split()[0])
+                        break
+            except (OSError, ValueError, IndexError, subprocess.SubprocessError):
+                pass
+
+        return signal_dbm, tx_bitrate_mbps, tx_retries
 
     def _test_network_connectivity(self) -> bool:
         """Test network connectivity to the server."""

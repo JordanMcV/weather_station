@@ -112,6 +112,9 @@ class SystemHealth:
     network_connected: bool = True
     last_upload: Optional[datetime] = None
     buffer_size: int = 0
+    wifi_signal_dbm: Optional[float] = None
+    wifi_tx_bitrate_mbps: Optional[float] = None
+    wifi_tx_retries: Optional[int] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -124,4 +127,7 @@ class SystemHealth:
             "network_connected": self.network_connected,
             "last_upload": self.last_upload.isoformat() if self.last_upload else None,
             "buffer_size": self.buffer_size,
+            "wifi_signal_dbm": self.wifi_signal_dbm,
+            "wifi_tx_bitrate_mbps": self.wifi_tx_bitrate_mbps,
+            "wifi_tx_retries": self.wifi_tx_retries,
         }

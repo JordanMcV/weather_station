@@ -5,7 +5,7 @@
   "tags": ["weather", "health"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "editable": true,
   "refresh": "1m",
   "time": { "from": "now-24h", "to": "now" },
@@ -245,6 +245,154 @@
           }
         },
         "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      }
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "WiFi signal",
+      "description": "Received signal level at the collector. Below -70 dBm the link is marginal.",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 22 },
+      "datasource": { "type": "influxdb", "uid": "weather-influxdb" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"system_health\" and r._field == \"wifi_signal_dbm\")\n  |> last()\n  |> keep(columns: [\"_value\", \"station_id\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: dBm",
+          "decimals": 0,
+          "noValue": "No data",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": -70 },
+              { "color": "green", "value": -60 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      }
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "WiFi transmit rate",
+      "description": "Negotiated transmit bitrate. 5.5 Mbit/s is the 802.11b floor and means the transmit path has collapsed, whatever the signal reads.",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 22 },
+      "datasource": { "type": "influxdb", "uid": "weather-influxdb" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"system_health\" and r._field == \"wifi_tx_bitrate_mbps\")\n  |> last()\n  |> keep(columns: [\"_value\", \"station_id\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: Mbit/s",
+          "decimals": 1,
+          "noValue": "No data",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 12 },
+              { "color": "green", "value": 24 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "WiFi signal over time",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 27 },
+      "datasource": { "type": "influxdb", "uid": "weather-influxdb" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system_health\" and r._field == \"wifi_signal_dbm\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)\n  |> keep(columns: [\"_time\", \"_value\", \"station_id\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: dBm",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "insertNulls": 900000
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "WiFi transmit rate and retries",
+      "description": "Transmit bitrate against transmit retries per minute. Retries climbing while the rate falls means the access point cannot hear the collector.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 27 },
+      "datasource": { "type": "influxdb", "uid": "weather-influxdb" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system_health\" and r._field == \"wifi_tx_bitrate_mbps\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)\n  |> keep(columns: [\"_time\", \"_value\", \"station_id\"])"
+        },
+        {
+          "refId": "B",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system_health\" and r._field == \"wifi_tx_retries\")\n  |> aggregateWindow(every: v.windowPeriod, fn: max, createEmpty: false)\n  |> derivative(unit: 1m, nonNegative: true)\n  |> keep(columns: [\"_time\", \"_value\", \"station_id\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: Mbit/s",
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "insertNulls": 900000
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byFrameRefID", "options": "B" },
+            "properties": [
+              { "id": "unit", "value": "suffix: retries/min" },
+              { "id": "custom.axisPlacement", "value": "right" },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },

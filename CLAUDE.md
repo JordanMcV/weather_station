@@ -175,6 +175,9 @@ JSON. Add a second checksum only if corrupt bodies start appearing in the log.
 - Health check endpoints
 - Client health reporting to `/api/v1/health/system`
 - Disk space and network status in the health payload
+- WiFi signal, transmit bitrate and cumulative transmit retries in the
+  health payload, read from `/proc/net/wireless` and `iw dev <iface> link`.
+  A host that supplies neither reports them as null.
 - Data freshness is visible on both Grafana dashboards. Alerting that sends a
   notification is not set up yet.
 
@@ -298,7 +301,10 @@ interface edits.
 - **Weather Conditions**: current values, plus temperature, humidity, pressure
   and wind history.
 - **Station Health**: buffer depth, CPU, memory, disk and chip temperature from
-  the `system_health` measurement.
+  the `system_health` measurement, plus WiFi signal, transmit bitrate and
+  transmit retries per minute. Transmit bitrate matters more than signal
+  strength: signal can look steady while the transmit path collapses to the
+  802.11b floor of 5.5 Mbit/s.
 
 Both dashboards show an outage as a visible break in the line rather than a
 straight line across it. Every query uses `aggregateWindow` with
