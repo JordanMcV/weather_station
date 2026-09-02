@@ -388,7 +388,7 @@
       "id": 8,
       "type": "timeseries",
       "title": "Wind speed",
-      "description": "Mean wind speed and gusts, following the usual meteorological convention. The mean is a ten minute average. The gust is the highest reading in each ten minute window. Individual 15 second readings are too spiky to read, and averaging alone would hide the gusts, so both are drawn. About 60 percent of readings are zero, because the anemometer needs a minimum wind to turn at all, so the mean sits low.",
+      "description": "Mean wind speed and gusts, following the usual meteorological convention. The mean is a ten minute average. The gust is the highest reading in each ten minute window. Individual 15 second readings are too spiky to read, and averaging alone would hide the gusts, so both are drawn. About 60 percent of readings are zero, because the anemometer needs a minimum wind to turn at all, so the mean sits low. The sensor reports metres per second. Each query multiplies by 3.6, because Grafana formats the unit but does not convert the value.",
       "gridPos": {
         "h": 8,
         "w": 24,
@@ -402,17 +402,17 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"weather\" and r._field == \"wind_speed\")\n  |> aggregateWindow(every: 10m, fn: max, createEmpty: true)\n  |> keep(columns: [\"_time\", \"_value\", \"station_id\"])"
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"weather\" and r._field == \"wind_speed\")\n  |> aggregateWindow(every: 10m, fn: max, createEmpty: true)\n  |> map(fn: (r) => ({r with _value: r._value * 3.6}))\n  |> keep(columns: [\"_time\", \"_value\", \"station_id\"])"
         },
         {
           "refId": "B",
-          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"weather\" and r._field == \"wind_speed\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)\n  |> timedMovingAverage(every: v.windowPeriod, period: 10m)\n  |> keep(columns: [\"_time\", \"_value\", \"station_id\"])"
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"weather\" and r._field == \"wind_speed\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)\n  |> timedMovingAverage(every: v.windowPeriod, period: 10m)\n  |> map(fn: (r) => ({r with _value: r._value * 3.6}))\n  |> keep(columns: [\"_time\", \"_value\", \"station_id\"])"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "velocityms",
-          "decimals": 2,
+          "unit": "velocitykmh",
+          "decimals": 1,
           "min": 0,
           "noValue": "No wind data",
           "custom": {
