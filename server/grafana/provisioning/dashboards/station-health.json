@@ -174,8 +174,7 @@
             "lineWidth": 2,
             "fillOpacity": 15,
             "showPoints": "never",
-            "spanNulls": false,
-            "insertNulls": 900000
+            "spanNulls": false
           }
         },
         "overrides": []
@@ -208,8 +207,7 @@
             "lineWidth": 1,
             "fillOpacity": 5,
             "showPoints": "never",
-            "spanNulls": false,
-            "insertNulls": 900000
+            "spanNulls": false
           }
         },
         "overrides": []
@@ -240,8 +238,7 @@
             "lineWidth": 2,
             "fillOpacity": 8,
             "showPoints": "never",
-            "spanNulls": false,
-            "insertNulls": 900000
+            "spanNulls": false
           }
         },
         "overrides": []
@@ -342,8 +339,7 @@
             "lineWidth": 2,
             "fillOpacity": 8,
             "showPoints": "never",
-            "spanNulls": false,
-            "insertNulls": 900000
+            "spanNulls": false
           }
         },
         "overrides": []
@@ -379,8 +375,7 @@
             "lineWidth": 2,
             "fillOpacity": 8,
             "showPoints": "never",
-            "spanNulls": false,
-            "insertNulls": 900000
+            "spanNulls": false
           }
         },
         "overrides": [
