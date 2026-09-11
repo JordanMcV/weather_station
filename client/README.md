@@ -87,6 +87,58 @@ sudo systemctl status weather-client
 sudo journalctl -u weather-client -f
 ```
 
+## WiFi watchdog
+
+The station sits outdoors on a weak link. When the access point restarts,
+NetworkManager sometimes stops retrying and the station never reconnects. The
+watchdog recovers the link without a trip outside to power cycle the Pi.
+
+A timer runs `wifi-watchdog.sh` every 5 minutes. The script pings the default
+gateway. When the ping fails it escalates, one step per check:
+
+| Time down | Action |
+|---|---|
+| 5, 10 min | Bring the NetworkManager connection up. This clears an autoconnect block. |
+| 15, 20 min | Restart NetworkManager. |
+| 25, 30 min | Reload the `brcmfmac` driver. This clears a wedged radio. |
+| 35 to 55 min | Wait for the access point. Retry the cheap steps every 30 minutes. |
+| 60 min | Reboot. |
+
+The wait before each further reboot doubles, up to 6 hours. During one outage
+the station reboots after 1 hour, 3 hours, 7 hours and 13 hours, then every 6
+hours. A reboot fixes a wedged radio, but it cannot fix an access point that is
+still down, so a longer wait each time costs nothing and stops a reboot loop.
+
+The counter lives in `/var/lib/weather-wifi-watchdog/state` and survives a
+reboot. It counts checks rather than seconds, because the Pi has no real time
+clock and the wall clock is wrong after a reboot that happens while the network
+is down. A successful ping clears the counter.
+
+Install it:
+
+```bash
+sudo cp weather-wifi-watchdog.service weather-wifi-watchdog.timer /etc/systemd/system/
+sudo nano /etc/systemd/system/weather-wifi-watchdog.service   # Correct ExecStart and the interface
+sudo systemctl daemon-reload
+sudo systemctl enable --now weather-wifi-watchdog.timer
+sudo systemctl list-timers weather-wifi-watchdog.timer
+```
+
+Check that the connection name matches your installation before you enable it:
+
+```bash
+nmcli -g NAME connection show
+```
+
+Watch what it does:
+
+```bash
+sudo journalctl -t weather-wifi-watchdog -f
+```
+
+Readings are never lost while the link is down. The client buffers 72 hours and
+backfills with the original timestamps.
+
 ## Clock handling
 
 A Raspberry Pi has no battery backed clock. After a power cut it restores the

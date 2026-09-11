@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Weather Station WiFi Watchdog every 5 minutes
+
+[Timer]
+# Wait 5 minutes after boot, so the link has time to come up on its own.
+OnBootSec=5min
+OnUnitActiveSec=5min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

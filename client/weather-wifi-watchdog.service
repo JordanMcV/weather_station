@@ -1,0 +1,20 @@
+[Unit]
+Description=Weather Station WiFi Watchdog
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+
+# Set this to match your installation, as in weather-client.service. The script
+# needs root to restart NetworkManager, reload the driver and reboot.
+ExecStart=/home/pi/weather_station/client/wifi-watchdog.sh
+
+# Override these if the interface or the NetworkManager connection differ.
+Environment=WIFI_WATCHDOG_IFACE=wlan0
+Environment=WIFI_WATCHDOG_CONNECTION=preconfigured
+
+# Provides /var/lib/weather-wifi-watchdog for the failure counter. The counter
+# must survive a reboot, or a reboot that does not fix the link restarts the
+# escalation and the station reboots in a loop.
+StateDirectory=weather-wifi-watchdog
