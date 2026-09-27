@@ -11,7 +11,9 @@ from weather_server.config import Config
 
 
 API_KEY = "test-api-key"
-BASE = datetime(2026, 8, 22, 10, 0, tzinfo=timezone.utc)
+# Relative to now, because the server drops readings older than
+# MAX_TIMESTAMP_AGE_DAYS and a fixed date ages out of that window.
+BASE = (datetime.now(timezone.utc) - timedelta(hours=1)).replace(microsecond=0)
 
 
 @pytest.fixture
