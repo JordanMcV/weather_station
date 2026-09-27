@@ -73,6 +73,29 @@ that data from reaching the database. A reading outside the window is dropped an
 counted, but the request still succeeds, because refusing the batch would keep it
 buffered on the client for ever.
 
+### Windy forwarding
+
+The server can forward current conditions to
+[Windy Stations](https://stations.windy.com). To turn it on, register a station
+on Windy and set these variables:
+
+```bash
+WINDY_STATION_ID=<station id from the Windy station page>
+WINDY_STATION_PASSWORD=<station password from the same page>
+WINDY_SOURCE_STATION=piw
+WINDY_UPLOAD_INTERVAL=300
+```
+
+The password belongs to the station. The account API key does not work here.
+`WINDY_SOURCE_STATION` is the `STATION_ID` that the collector sends.
+
+Every interval, the server reads the last 10 minutes of readings from InfluxDB.
+It sends the mean temperature, humidity, pressure and wind speed, the strongest
+wind speed as the gust, and the latest wind direction. If no reading arrived in
+those 10 minutes, the server skips the upload, so Windy shows the station as
+offline instead of showing stale data. Windy refuses uploads closer together
+than 5 minutes, so the server raises a shorter interval to 300 seconds.
+
 ## API
 
 All ingestion endpoints need `Authorization: Bearer <API_KEY>`.

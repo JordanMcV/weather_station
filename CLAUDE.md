@@ -299,6 +299,9 @@ curl http://localhost:8080/api/v1/health
 - `CORS_ALLOW_ORIGINS`: Comma separated browser origins. Empty keeps CORS off.
 - `MAX_TIMESTAMP_FUTURE_SECONDS`: Reject readings stamped further ahead than this
 - `MAX_TIMESTAMP_AGE_DAYS`: Reject readings older than this
+- `WINDY_STATION_ID`, `WINDY_STATION_PASSWORD`: Windy Stations credentials. Forwarding stays off until both are set.
+- `WINDY_SOURCE_STATION`: The collector `STATION_ID` to forward to Windy
+- `WINDY_UPLOAD_INTERVAL`: Seconds between Windy uploads, minimum 300
 
 ### Grafana Dashboards
 

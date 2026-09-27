@@ -39,6 +39,10 @@ services:
       - INFLUXDB_ORG=weather
       - INFLUXDB_BUCKET=weather_data
       - API_KEY=${API_KEY:-your-api-key-here}
+      - WINDY_STATION_ID=${WINDY_STATION_ID:-}
+      - WINDY_STATION_PASSWORD=${WINDY_STATION_PASSWORD:-}
+      - WINDY_SOURCE_STATION=${WINDY_SOURCE_STATION:-piw}
+      - WINDY_UPLOAD_INTERVAL=${WINDY_UPLOAD_INTERVAL:-300}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
       influxdb:

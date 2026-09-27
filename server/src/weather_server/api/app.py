@@ -1,8 +1,10 @@
 """FastAPI application for weather data ingestion."""
 
+import asyncio
 import gzip
 import logging
 import zlib
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import List, Tuple
 
@@ -15,6 +17,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from ..config import Config
 from ..models import HealthBatch, WeatherBatch, SystemHealth
+from ..windy import WindyForwarder
 from .influx_client import InfluxDBClient
 
 
@@ -125,10 +128,23 @@ def partition_readings(batch: WeatherBatch, config: Config) -> Tuple[List, List[
 
 
 def create_app(config: Config) -> FastAPI:
+    influx_client = InfluxDBClient(config)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        forwarder = None
+        if config.windy_enabled:
+            forwarder = asyncio.create_task(WindyForwarder(config, influx_client).run())
+            logger.info("[Windy] Forwarding started", extra={"windy_station": config.windy_station_id})
+        yield
+        if forwarder:
+            forwarder.cancel()
+
     app = FastAPI(
         title="Weather Station API",
         description="Weather data ingestion API for dual-Pi weather station",
-        version="0.1.0"
+        version="0.1.0",
+        lifespan=lifespan,
     )
 
     # Decompress gzip request bodies before routing
@@ -144,9 +160,6 @@ def create_app(config: Config) -> FastAPI:
             allow_methods=["GET", "POST"],
             allow_headers=["Authorization", "Content-Type", "Content-Encoding"],
         )
-
-    # Initialize InfluxDB client
-    influx_client = InfluxDBClient(config)
 
     async def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
         """Verify API key authentication."""

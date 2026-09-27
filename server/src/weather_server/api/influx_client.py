@@ -1,7 +1,7 @@
 """InfluxDB client for weather data storage."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any
 
 from influxdb_client import InfluxDBClient as InfluxClient, Point
@@ -197,6 +197,22 @@ class InfluxDBClient:
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "error": str(e)
             }
+
+    def get_recent_weather(self, station_id: str, window: timedelta) -> List[Dict[str, Any]]:
+        """Return one dict per weather point for a station over a recent window."""
+        query = f'''
+            from(bucket: "{self.config.influxdb_bucket}")
+            |> range(start: -{int(window.total_seconds())}s)
+            |> filter(fn: (r) => r._measurement == "weather" and r.station_id == "{station_id}")
+            |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+        '''
+        records = []
+        for table in self.query_api.query(query):
+            for record in table.records:
+                values = dict(record.values)
+                values["time"] = record.get_time()
+                records.append(values)
+        return records
 
     def close(self):
         """Close the InfluxDB client."""
