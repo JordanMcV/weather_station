@@ -4,7 +4,7 @@ import sqlite3
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 
 from ..models import SystemHealth, WeatherReading
@@ -293,14 +293,17 @@ class SQLiteBuffer:
         """Apply this boot's offset to provisional readings from earlier boots.
 
         The offset only carries across a reboot when the wrong clock carried
-        across it too. Contiguous timestamps are the evidence for that, so a
-        gap wider than max_inference_gap_seconds leaves the readings alone.
+        across it too. Contiguous timestamps are the evidence for that. Each
+        earlier boot must run on into the boot after it, so walk back one boot
+        at a time and stop at the first gap wider than max_inference_gap_seconds.
+        A stale boot from weeks before must not inherit an offset because a
+        newer boot happens to be contiguous.
         """
         if offset is None or earliest_stored is None:
             return 0
 
         rows = conn.execute("""
-            SELECT id, timestamp
+            SELECT id, timestamp, boot_id
             FROM weather_readings
             WHERE time_provisional = 1 AND (boot_id IS NULL OR boot_id != ?)
         """, (current_boot_id,)).fetchall()
@@ -308,25 +311,31 @@ class SQLiteBuffer:
         if not rows:
             return 0
 
-        latest_earlier = max(datetime.fromisoformat(row[1]) for row in rows)
-        gap = (earliest_stored - latest_earlier).total_seconds()
+        boots: Dict[Optional[str], List[Tuple[int, datetime]]] = {}
+        for row_id, stored, boot in rows:
+            boots.setdefault(boot, []).append((row_id, datetime.fromisoformat(stored)))
 
-        if not 0 <= gap <= max_inference_gap_seconds:
-            logger.warning(
-                "[Weather Client] Left readings from an earlier boot uncorrected, clock not continuous",
-                extra={"readings": len(rows), "gap_seconds": round(gap, 3)},
-            )
-            return 0
+        reference = earliest_stored
+        corrected = 0
+        for boot_rows in sorted(boots.values(), key=lambda group: max(t for _, t in group), reverse=True):
+            gap = (reference - max(t for _, t in boot_rows)).total_seconds()
+            if not 0 <= gap <= max_inference_gap_seconds:
+                logger.warning(
+                    "[Weather Client] Left readings from an earlier boot uncorrected, clock not continuous",
+                    extra={"readings": len(rows) - corrected, "gap_seconds": round(gap, 3)},
+                )
+                break
 
-        for row_id, stored in rows:
-            corrected = datetime.fromisoformat(stored) + offset
-            conn.execute("""
-                UPDATE weather_readings
-                SET timestamp = ?, time_provisional = 0
-                WHERE id = ?
-            """, (corrected.isoformat(), row_id))
+            for row_id, stored in boot_rows:
+                conn.execute("""
+                    UPDATE weather_readings
+                    SET timestamp = ?, time_provisional = 0
+                    WHERE id = ?
+                """, ((stored + offset).isoformat(), row_id))
+            corrected += len(boot_rows)
+            reference = min(t for _, t in boot_rows)
 
-        return len(rows)
+        return corrected
 
     def add_health(self, health: SystemHealth) -> bool:
         """Add a health snapshot to the buffer.

@@ -152,3 +152,51 @@ def test_existing_database_gains_the_clock_columns(tmp_path):
     # The pre-existing reading survives and is treated as trustworthy.
     assert len(buffer.get_pending_readings()) == 1
     assert buffer.count_provisional() == 0
+
+
+def test_a_stale_boot_is_not_corrected_through_a_newer_contiguous_boot(buffer):
+    """A contiguous boot once made every older provisional reading inherit the offset."""
+    # Stuck for weeks, with no clock link to anything after it.
+    buffer.add_reading(
+        make_reading(datetime(2026, 8, 28, 19, 30, tzinfo=timezone.utc)),
+        boot_id="stale",
+        monotonic_ns=500 * NS,
+        time_provisional=True,
+    )
+    # The previous boot, which runs on into this one.
+    buffer.add_reading(
+        make_reading(datetime(2026, 10, 3, 15, 58, 30, tzinfo=timezone.utc)),
+        boot_id="b0",
+        monotonic_ns=500 * NS,
+        time_provisional=True,
+    )
+    buffer.add_reading(
+        make_reading(datetime(2026, 10, 3, 15, 59, tzinfo=timezone.utc)),
+        boot_id="b1",
+        monotonic_ns=100 * NS,
+        time_provisional=True,
+    )
+
+    exact, inferred = buffer.correct_provisional(
+        "b1", datetime(2026, 10, 3, 16, 10, tzinfo=timezone.utc), 400 * NS
+    )
+
+    assert (exact, inferred) == (1, 1)
+    assert buffer.count_provisional() == 1
+
+
+def test_a_chain_of_contiguous_boots_is_corrected(buffer):
+    for boot, minute in (("b0", 0), ("b1", 2), ("b2", 4)):
+        buffer.add_reading(
+            make_reading(datetime(2026, 8, 27, 16, minute, tzinfo=timezone.utc)),
+            boot_id=boot,
+            monotonic_ns=100 * NS,
+            time_provisional=True,
+        )
+
+    exact, inferred = buffer.correct_provisional(
+        "b2", datetime(2026, 8, 27, 17, 30, tzinfo=timezone.utc), 400 * NS
+    )
+
+    assert (exact, inferred) == (1, 2)
+    assert buffer.count_provisional() == 0
