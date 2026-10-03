@@ -8,9 +8,8 @@ from weather_client.config import (
 )
 
 
-def test_rain_is_disabled_by_default():
-    assert "rain" not in DEFAULT_OPTIONAL_SENSORS
-    assert "wind" in DEFAULT_OPTIONAL_SENSORS
+def test_every_optional_sensor_is_enabled_by_default():
+    assert DEFAULT_OPTIONAL_SENSORS == ALL_OPTIONAL_SENSORS
 
 
 def test_parse_accepts_both_sensors():
@@ -30,7 +29,7 @@ def test_parse_empty_disables_every_optional_sensor():
 
 
 def test_from_env_uses_defaults(monkeypatch):
-    for name in ("ENABLED_SENSORS", "TEMPERATURE_OFFSET", "DRY_RUN", "UPLOAD_BATCH_SIZE"):
+    for name in ("ENABLED_SENSORS", "TEMPERATURE_OFFSET", "DRY_RUN", "UPLOAD_BATCH_SIZE", "RAIN_MM_PER_TIP"):
         monkeypatch.delenv(name, raising=False)
 
     config = Config.from_env()
@@ -38,6 +37,7 @@ def test_from_env_uses_defaults(monkeypatch):
     assert config.enabled_sensors == DEFAULT_OPTIONAL_SENSORS
     assert config.dry_run is False
     assert config.upload_batch_size == 500
+    assert config.rain_mm_per_tip == 0.2794
 
 
 def test_from_env_calibration_matches_the_dataclass_default(monkeypatch):
@@ -52,12 +52,14 @@ def test_from_env_reads_overrides(monkeypatch):
     monkeypatch.setenv("ENABLED_SENSORS", "rain")
     monkeypatch.setenv("UPLOAD_BATCH_SIZE", "50")
     monkeypatch.setenv("DRY_RUN", "true")
+    monkeypatch.setenv("RAIN_MM_PER_TIP", "0.3")
 
     config = Config.from_env()
 
     assert config.enabled_sensors == frozenset({"rain"})
     assert config.upload_batch_size == 50
     assert config.dry_run is True
+    assert config.rain_mm_per_tip == 0.3
 
 
 def test_dry_run_accepts_several_spellings(monkeypatch):

@@ -285,6 +285,7 @@ curl http://localhost:8080/api/v1/health
 - `DATABASE_PATH`: SQLite buffer path
 - `TEMPERATURE_OFFSET`: Sensor calibration
 - `ENABLED_SENSORS`: Optional sensors to read, from `wind` and `rain`. Temperature, humidity and pressure always read.
+- `RAIN_MM_PER_TIP`: Rain per bucket tip in mm. The default of 0.2794 suits the Argent and SparkFun gauge.
 - `HEALTH_UPLOAD_INTERVAL`: Seconds between health reports
 - `DRY_RUN`: Set true to log readings without buffering or uploading
 
@@ -309,8 +310,8 @@ Provisioned from `server/grafana/provisioning`. Change a dashboard in the
 repository, not in the Grafana user interface, because the provider overwrites
 interface edits.
 
-- **Weather Conditions**: current values, plus temperature, humidity, pressure
-  and wind history.
+- **Weather Conditions**: current values, plus temperature, humidity, pressure,
+  wind and hourly rain history, and the rain total of the last 24 hours.
 - **Station Health**: buffer depth, CPU, memory, disk and chip temperature from
   the `system_health` measurement, plus WiFi signal, transmit bitrate and
   transmit retries per minute. Transmit bitrate matters more than signal

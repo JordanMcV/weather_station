@@ -12,8 +12,11 @@ logger = logging.getLogger(__name__)
 # pressure come from the BME280 and are always read.
 ALL_OPTIONAL_SENSORS = frozenset({"wind", "rain"})
 
-# The rain gauge does not register water, so it stays off until it is repaired.
-DEFAULT_OPTIONAL_SENSORS = frozenset({"wind"})
+DEFAULT_OPTIONAL_SENSORS = ALL_OPTIONAL_SENSORS
+
+# The weatherhat library hardcodes the rain per bucket tip for the Argent and
+# SparkFun gauge. Other gauges tip at a different volume.
+LIBRARY_RAIN_MM_PER_TIP = 0.2794
 
 
 def parse_enabled_sensors(raw: str) -> FrozenSet[str]:
@@ -55,6 +58,7 @@ class Config:
     # correction. Re-measure before changing this.
     temperature_offset: float = 0.0
     enabled_sensors: FrozenSet[str] = field(default_factory=lambda: DEFAULT_OPTIONAL_SENSORS)
+    rain_mm_per_tip: float = LIBRARY_RAIN_MM_PER_TIP
 
     # Health reporting
     health_upload_interval: int = 300
@@ -86,6 +90,7 @@ class Config:
             enabled_sensors=parse_enabled_sensors(
                 os.getenv("ENABLED_SENSORS", ",".join(sorted(DEFAULT_OPTIONAL_SENSORS)))
             ),
+            rain_mm_per_tip=float(os.getenv("RAIN_MM_PER_TIP", str(LIBRARY_RAIN_MM_PER_TIP))),
             health_upload_interval=int(os.getenv("HEALTH_UPLOAD_INTERVAL", "300")),
             station_id=os.getenv("STATION_ID", "piw"),
             log_level=os.getenv("LOG_LEVEL", "INFO"),

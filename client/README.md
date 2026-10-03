@@ -42,7 +42,8 @@ UPLOAD_INTERVAL=300
 SENSOR_READ_INTERVAL=15.0
 BUFFER_MAX_SIZE=17280
 DATABASE_PATH=/var/lib/weather-client/weather.db
-ENABLED_SENSORS=wind
+ENABLED_SENSORS=wind,rain
+RAIN_MM_PER_TIP=0.2794
 LOG_LEVEL=INFO
 ```
 
@@ -54,6 +55,13 @@ which systemd empties at boot.
 
 Temperature, humidity and pressure always read. `ENABLED_SENSORS` adds the
 optional sensors, from `wind` and `rain`.
+
+`RAIN_MM_PER_TIP` is the rain that one tip of the bucket represents. The
+default of 0.2794 mm suits the Argent and SparkFun gauge. Other gauges differ,
+so measure yours. Fill a syringe or a measuring jug with at least 80 ml of
+water. Pour it slowly into the funnel, and stop exactly when a tip happens.
+Divide the volume in ml by the number of tips, then divide again by the funnel
+area in cm², and multiply by 10. A MISOL WH-SP-RG measured 0.3 mm per tip.
 
 ## Usage
 

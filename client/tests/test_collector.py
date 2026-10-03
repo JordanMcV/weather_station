@@ -34,7 +34,7 @@ class RecordingUploader:
         return None
 
 
-def make_collector(db_path, fake_sensor, enabled_sensors, batch_size=500, fail_after=None):
+def make_collector(db_path, fake_sensor, enabled_sensors, batch_size=500, fail_after=None, **overrides):
     config = Config(
         server_url="http://example.invalid:8080",
         api_key="k",
@@ -42,6 +42,7 @@ def make_collector(db_path, fake_sensor, enabled_sensors, batch_size=500, fail_a
         enabled_sensors=enabled_sensors,
         upload_batch_size=batch_size,
         buffer_max_size=100000,
+        **overrides,
     )
     collector = WeatherCollector.__new__(WeatherCollector)
     collector.config = config
@@ -70,6 +71,13 @@ def test_both_optional_sensors_enabled(db_path, fake_sensor):
 
     assert values["rain_total"] == 1.5
     assert values["wind_speed"] == 2.5
+
+
+def test_rain_is_rescaled_for_a_different_gauge(db_path, fake_sensor):
+    fake_sensor.rain_total = 0.2794
+    collector = make_collector(db_path, fake_sensor, frozenset({"rain"}), rain_mm_per_tip=0.3)
+
+    assert collector._read_optional_sensors()["rain_total"] == pytest.approx(0.3)
 
 
 def test_no_optional_sensors(db_path, fake_sensor):

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import weatherhat
 import psutil
 
-from ..config import Config
+from ..config import LIBRARY_RAIN_MM_PER_TIP, Config
 from ..models import WeatherReading, WeatherBatch, SystemHealth, HealthBatch
 from .buffer import SQLiteBuffer
 from .clock import boot_id, clock_is_synced, monotonic_ns
@@ -184,7 +184,7 @@ class WeatherCollector:
             values["wind_speed"] = self.sensor.wind_speed
             values["wind_direction"] = self.sensor.wind_direction
         if "rain" in self.config.enabled_sensors:
-            values["rain_total"] = self.sensor.rain_total
+            values["rain_total"] = self.sensor.rain_total * self.config.rain_mm_per_tip / LIBRARY_RAIN_MM_PER_TIP
 
         return values
 
