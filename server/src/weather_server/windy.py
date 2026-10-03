@@ -17,6 +17,8 @@ WINDY_UPDATE_URL = "https://stations.windy.com/api/v2/observation/update"
 # Windy wants current conditions, so summarise a short recent window and skip
 # the upload when the collector has gone quiet rather than resend stale data.
 SUMMARY_WINDOW = timedelta(minutes=10)
+# Windy reads precip as the rain over the last hour.
+PRECIP_WINDOW = timedelta(hours=1)
 
 
 def build_params(station_id: str, records: List[Dict[str, Any]], now: datetime) -> Optional[Dict[str, Any]]:
@@ -24,7 +26,9 @@ def build_params(station_id: str, records: List[Dict[str, Any]], now: datetime) 
 
     Each record holds a "time" and the stored fields. Averages smooth sensor
     noise, the strongest wind stands in for the gust, and the latest direction
-    is sent as is. Returns None when there is nothing recent to report.
+    is sent as is. Each rain_total is the rain since the previous reading, so
+    precip is their sum over the last hour. Returns None when there is nothing
+    recent to report.
     """
     recent = [record for record in records if record["time"] >= now - SUMMARY_WINDOW]
     if not recent:
@@ -57,6 +61,14 @@ def build_params(station_id: str, records: List[Dict[str, Any]], now: datetime) 
     if latest.get("wind_direction") is not None:
         params["winddir"] = round(latest["wind_direction"])
 
+    rain = [
+        record["rain_total"]
+        for record in records
+        if record["time"] >= now - PRECIP_WINDOW and record.get("rain_total") is not None
+    ]
+    if rain:
+        params["precip"] = round(sum(rain), 1)
+
     return params
 
 
@@ -82,7 +94,7 @@ class WindyForwarder:
         records = await asyncio.to_thread(
             self.influx_client.get_recent_weather,
             self.config.windy_source_station,
-            SUMMARY_WINDOW,
+            PRECIP_WINDOW,
         )
         params = build_params(self.config.windy_station_id, records, datetime.now(timezone.utc))
         if params is None:

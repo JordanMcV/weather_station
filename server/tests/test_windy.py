@@ -61,3 +61,22 @@ def test_missing_wind_is_left_out():
 def test_forwarding_needs_both_id_and_password():
     assert not Config(windy_station_id="abc").windy_enabled
     assert Config(windy_station_id="abc", windy_station_password="secret").windy_enabled
+
+
+def test_precip_is_the_rain_over_the_last_hour():
+    records = [
+        record(-70 * 60, rain_total=5.0),
+        record(-50 * 60, rain_total=0.2794),
+        record(-20 * 60, rain_total=0.5588),
+        record(0, rain_total=0.0),
+    ]
+
+    assert build_params("abc", records, BASE)["precip"] == 0.8
+
+
+def test_precip_is_left_out_when_rain_is_not_recorded():
+    assert "precip" not in build_params("abc", [record(-20 * 60), record(0)], BASE)
+
+
+def test_rain_alone_does_not_make_stale_data_fresh():
+    assert build_params("abc", [record(-20 * 60, rain_total=1.0)], BASE) is None

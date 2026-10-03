@@ -89,9 +89,11 @@ WINDY_UPLOAD_INTERVAL=300
 The password belongs to the station. The account API key does not work here.
 `WINDY_SOURCE_STATION` is the `STATION_ID` that the collector sends.
 
-Every interval, the server reads the last 10 minutes of readings from InfluxDB.
-It sends the mean temperature, humidity, pressure and wind speed, the strongest
-wind speed as the gust, and the latest wind direction. If no reading arrived in
+Every interval, the server reads the last hour of readings from InfluxDB. From
+the last 10 minutes, it sends the mean temperature, humidity, pressure and wind
+speed, the strongest wind speed as the gust, and the latest wind direction. It
+also sends the rain total of the last hour as `precip`. A station with the rain
+gauge disabled sends no `precip`. If no reading arrived in
 those 10 minutes, the server skips the upload, so Windy shows the station as
 offline instead of showing stale data. Windy refuses uploads closer together
 than 5 minutes, so the server raises a shorter interval to 300 seconds.
